@@ -1,0 +1,54 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+artifacts/
+work/
+ci/
+coverage/
+lib-cov/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Go
+__debug_bin*
+*.test
+*.out
+coverage.out
+vendor/
+
+# End-to-end tests
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+/playwright/.auth/
+
+# Local dev stack data and secrets
+.env
+.env.*
+!.env.example
+docker/data/
+
+# Tooling
+.eslintcache
+.claude/worktrees/
+
+# Editors and OS
+.vscode/
+.idea/
+*.swp
+.DS_Store
