@@ -46,7 +46,7 @@
                  └───────────────────────────┘
 ```
 
-* **Packaging:** an app plugin with a nested backend data source plugin, shipped and signed as one package. The app has no backend of its own; every Bugsink call goes through a data source instance.
+* **Packaging:** an app plugin (`ahmedismail-bugsink-app`) with a nested backend data source plugin (`ahmedismail-bugsink-datasource`), shipped and signed as one package under the grafana.com organization `ahmedismail`. The app has no backend of its own; every Bugsink call goes through a data source instance.
 * **Multiple Bugsink instances:** each is one data source instance. The App pages have a data source picker.
 * **Frontend (`@grafana/ui`, `@grafana/scenes`, React):**
   * App pages: issue list, issue detail, event detail, triage controls.
@@ -164,6 +164,7 @@ Bugsink 2.6.2 keeps hourly event counters per installation, project and issue, u
 ---
 
 ## 8. Development Phases
+The build order, split into vertical milestones, is in [`implementation_roadmap.md`](implementation_roadmap.md). The table below is the original outline.
 
 | Phase | Deliverable | Scope |
 | :--- | :--- | :--- |
@@ -177,7 +178,10 @@ Bugsink 2.6.2 keeps hourly event counters per installation, project and issue, u
 
 ---
 
-## 9. Open Questions
-* License for publication.
-* Plugin id and organization name in the catalog.
+## 9. License
+GNU General Public License, version 3 or later (`GPL-3.0-or-later`). A personal open source project of Ahmed Ismail.
+
+---
+
+## 10. Open Questions
 * Whether issue comments as triage attribution should be on by default.
