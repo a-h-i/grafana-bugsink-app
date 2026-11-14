@@ -1,0 +1,16 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+[project]
+name = "sample-python"
+version = "0.1.0"
+description = "Sample app that reports errors to Bugsink and traces and logs over OTLP"
+requires-python = ">=3.13"
+license = "GPL-3.0-or-later"
+dependencies = [
+    "fastapi",
+    "uvicorn",
+    "sentry-sdk[opentelemetry-otlp]>=2.75",
+    "opentelemetry-sdk",
+    "opentelemetry-exporter-otlp-proto-http",
+    "opentelemetry-instrumentation-asgi",
+    "opentelemetry-instrumentation-logging",
+]

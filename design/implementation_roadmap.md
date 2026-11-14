@@ -20,6 +20,7 @@ layer in places (Phase 2 is the whole read-only UI); the milestones below are ve
 * Go unit tests for new client and frame code; frontend unit tests for new components and logic.
 * The demo runs as a `@grafana/plugin-e2e` test against the Compose stack in CI.
 * The health check reports any token capability the new feature needs (§4.A).
+* End-to-end tests that produce events stay under Bugsink's ingestion throttle (about 1000 events per 5 minutes, spec §7).
 * User documentation and `CHANGELOG.md` cover the new feature.
 * The provisioned sample dashboard and data source in the Compose stack exercise it.
 
@@ -46,9 +47,10 @@ No plugin code. It answers the questions the later milestones are built on.
 
 * **Scope:** Compose stack (Bugsink 2.6.2+, Grafana, Tempo, Loki, OpenTelemetry Collector); the Python
   sample app with a Sentry SDK and OpenTelemetry sharing trace context, producing errors on demand;
-  seeded Bugsink project and API tokens (one global, one project-bound); the OpenAPI schema from
+  two seeded Bugsink projects and four API tokens (global read, global triage, project-bound read, no capabilities); the OpenAPI schema from
   `/api/canonical/0/schema/` pinned in the repo.
-* **Questions to answer**, written to `design/phase0_findings.md`:
+* **Questions to answer**, written to `design/phase0_findings.md`. All eleven are answered there
+  (Q1 to Q11, with evidence and the spec edits they caused), so the list below is the original outline:
   * Does the `trace` tag hold the OpenTelemetry trace id that Tempo has?
   * Where do environment and release live in event `data`?
   * How does a client learn a token's capabilities (needed by the M1 health check)?
@@ -58,24 +60,30 @@ No plugin code. It answers the questions the later milestones are built on.
 * **Demo:** `docker compose up`, trigger an error in the sample app, find the event in Bugsink and its
   trace in Tempo under the same trace id.
 * **Exit:** every question has an answer; the spec is corrected where a finding contradicts it.
+  Done: see [`phase0_findings.md`](phase0_findings.md).
 
 ### M1: Connect
 
 The walking skeleton: every layer exists and is wired, with the smallest feature that proves it.
 
-* **Scope:** `create-plugin` scaffold of the app with the nested backend data source; generated Go
-  client; config editor (base URL, API token in `secureJsonData`, project id for project-bound tokens);
-  `CheckHealth` for URL, token and token kind; Compose stack mounts and provisions the plugin; CI
+* **Scope:** `create-plugin` scaffold of the app with the nested backend data source; Go client
+  generated with `oapi-codegen` v2.8.2 from the unmodified schema (`ogen` fails on it, findings Q11);
+  config editor (base URL, API token in `secureJsonData`; for a project-bound token `GET /projects/`
+  returns its project, so the editor can discover it, findings Q5; see Open decisions); `CheckHealth`
+  for URL, token and token kind, and for the capabilities the token lacks (no endpoint reports them; `GET /api/0/` needs `debug-files:upload`,
+  findings Q4; how it learns them is an open decision); Compose stack mounts and provisions the plugin; CI
   (lint, unit tests, build, end-to-end); license headers and `README.md`.
 * **Demo:** add the data source with a valid token and see success; with a wrong URL, a bad token and a
-  project-bound token without a project id, see a message that names the problem.
+  token without capabilities, see a message that names the problem; with a project-bound token, see
+  success.
 * **Plugin ids:** `ahmedismail-bugsink-app` and `ahmedismail-bugsink-datasource`.
 
 ### M2: Issues in dashboards
 
 * **Scope:** issues query type in `QueryData` (`project`, `state`, `q`, `sort`, `order`) returning a table
-  frame with the fields in §4.B; pagination by following `next` URLs; dashboard time range by sorting on
-  `last_seen` and stopping at the range start; short-lived cache; query editor with project picker (or
+  frame with the fields in §4.B; pagination by following `next` URLs (250 per page, no total count); dashboard time range by sorting on
+  `last_seen` and stopping at the range start (`sort=last_seen&order=desc` sent explicitly;
+  `sort=digest_order` only with a project); short-lived cache; query editor with project picker (or
   the fixed project for project-bound tokens), state picker and search field; link from each row to the
   issue in Bugsink's UI.
 * **Demo:** a table panel showing unresolved issues of one project seen in the last 24 hours, filtered
@@ -91,11 +99,16 @@ The walking skeleton: every layer exists and is wired, with the smallest feature
 
 ### M4: Issue detail & events
 
-* **Scope:** issue detail page (summary, tag values with counts, history); events query type in the data
-  source (list for one issue with `q`, lookup by SDK event id, search by trace) returning a table frame;
-  event list on the issue page, newest first; `CallResource` routes for the detail reads.
+* **Scope:** issue detail page (summary, tag values with counts (`events:read`), history from
+  `GET /issue-history/`); events query type in the data source (list for one issue with `q`, lookup by
+  SDK event id) returning a table frame; search by trace through the issue list
+  (`GET /issues/?q=trace:<id>`, then the events of that issue), since `/events/` needs an issue; event
+  list on the issue page (order: spec §10); `CallResource` routes for the
+  detail reads.
 * **Demo:** click an issue in the list, see its summary, tags and history, and a list of its events; an
-  events table panel on a dashboard filtered by `trace:<id>`.
+  issues table panel on a dashboard filtered by `trace:<id>`, and the events of that issue filtered by
+  the same trace.
+* **Needs first:** how the event list is ordered in the UI, and whether the events query fans out across issues for `trace:<id>` (spec §10).
 * **Not yet:** event content. An event row shows ids and timestamps only.
 
 ### M5: Event detail
@@ -114,9 +127,14 @@ The walking skeleton: every layer exists and is wired, with the smallest feature
   `${service}` source; internal data links on event frames; **Open trace** and **Open logs** buttons on
   the event detail, hidden when there is no `trace_id` or no target; the JavaScript sample app, as the
   second SDK to verify against; documentation of the SDK trace-context prerequisite and of the reverse
-  link from a Tempo trace to its Bugsink events.
+  link from a Tempo trace to its Bugsink events (trace, issue, events; findings Q7); the documentation
+  also covers the ASGI middleware order, events whose trace Tempo does not have, and `traceparent`
+  propagation (findings Q1 and other findings).
 * **Demo:** trigger an error in each sample app, open the event, land on the right trace in Tempo and on
-  the matching log lines in Loki; an event without a `trace_id` shows no buttons.
+  the matching log lines in Loki; an event without a `trace_id` shows no buttons; the sample app's
+  `/no-trace` event (a trace id Tempo does not have) behaves as decided.
+* **Needs first:** what the UI does when the event's trace is not in Tempo, and whether the documented
+  setup keeps the OTLP integration's propagator (spec §10).
 
 ### M7: Basic triage
 
@@ -148,10 +166,12 @@ The walking skeleton: every layer exists and is wired, with the smallest feature
 
 * **Scope:** `alerting: true`; new issues per interval from `first_seen`; current-value queries
   (open-issue count, issues seen in the last N minutes, event count of the current hour); documentation
-  of the hourly-resolution limit.
+  of the hourly-resolution limit. The open-issue count needs a page-through of the issue list (250 per
+  page, no count field).
 * **Demo:** an alert rule that fires when a project's event count in the current hour passes a
   threshold, and one that fires when open issues exceed a number; both fire after the sample app
   produces errors.
+* **Needs first:** how the open-issue count is obtained (spec §10).
 
 ### M11: Release
 
@@ -189,3 +209,11 @@ M7 to M10 following as minor versions.
 | Decision | Needed by | Notes |
 | :--- | :--- | :--- |
 | Attribution comments on by default | M8 | Spec §10. |
+| What the UI does when an event's trace is not in Tempo | M6 | Spec §10; findings, "Other findings". |
+| `traceparent` propagation with the OTLP integration | M6 | Spec §10; `setup_propagator=False` untested. |
+| How the health check learns capabilities | M1 | Spec §10; findings Q4. |
+| Event list order in the UI | M4 | Spec §10; findings Q8. |
+| Events query for `trace:<id>`: fan out across issues or not | M4 | Spec §10; findings Q7. |
+| Config editor for project-bound tokens: discover the project or also accept an id | M1 | Spec §10; findings Q5. |
+| How the open-issue count is obtained | M10 | Spec §10; findings Q10. |
+| Licence status of Go client code generated from the PolyForm Shield schema when compiled into the GPL plugin | M1 | Spec §10; findings Q11. |

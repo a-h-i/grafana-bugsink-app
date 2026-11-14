@@ -23,6 +23,11 @@ pids
 *.seed
 *.pid.lock
 
+# Python
+__pycache__/
+*.pyc
+.venv/
+
 # Go
 __debug_bin*
 *.test

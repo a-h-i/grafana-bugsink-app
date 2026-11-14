@@ -1,0 +1,2858 @@
+openapi: 3.0.3
+info:
+  title: Bugsink
+  version: 2.6.3
+  description: Bugsink API Documentation
+paths:
+  /api/canonical/0/events/:
+    get:
+      operationId: events_list
+      description: |-
+        List events for an issue. The list response omits the full event `data` payload.
+
+        Required capability: `events:read`.
+      summary: List events
+      parameters:
+      - name: cursor
+        required: false
+        in: query
+        description: The pagination cursor value.
+        schema:
+          type: string
+      - in: query
+        name: issue
+        schema:
+          type: string
+        description: Filter events by issue UUID or friendly ID (required).
+        required: true
+      - in: query
+        name: order
+        schema:
+          type: string
+          enum:
+          - asc
+          - desc
+        description: 'Sort order of digest_order (default: desc).'
+      - in: query
+        name: q
+        schema:
+          type: string
+        description: Search titles as plain text and filter tags with `key:value`;
+          quote values containing spaces. Results must match the text and every tag
+          filter.
+      tags:
+      - events
+      security:
+      - BearerAuth: []
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedEventListList'
+          description: ''
+      x-bugsink-required-capability: events:read
+  /api/canonical/0/events/{id}/:
+    get:
+      operationId: events_retrieve
+      description: |-
+        Retrieve an event by internal Bugsink event UUID. The detail response includes the full `data` payload.
+
+        Required capability: `events:read`.
+      summary: Retrieve an event
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+          description: Bugsink-internal
+        required: true
+      tags:
+      - events
+      security:
+      - BearerAuth: []
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventDetail'
+          description: ''
+      x-bugsink-required-capability: events:read
+  /api/canonical/0/events/{id}/stacktrace/:
+    get:
+      operationId: events_stacktrace_retrieve
+      description: |-
+        Render the event's stacktrace (frames, source, locals) as Markdown-like text.
+
+        Required capability: `events:read`.
+      summary: Render an event stacktrace
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+          description: Bugsink-internal
+        required: true
+      tags:
+      - events
+      security:
+      - BearerAuth: []
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            text/markdown:
+              schema:
+                type: string
+              examples:
+                Stacktrace:
+                  value: Traceback (most rece...
+          description: Stacktrace as Markdown
+      x-bugsink-required-capability: events:read
+  /api/canonical/0/events/lookup/:
+    get:
+      operationId: events_lookup_retrieve
+      description: |-
+        Retrieve an event by project and SDK-generated `event_id`, including the full `data` payload.
+
+        Required capability: `events:read`.
+      summary: Look up an event by SDK event ID
+      parameters:
+      - in: query
+        name: event_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: query
+        name: project
+        schema:
+          type: integer
+        required: true
+      tags:
+      - events
+      security:
+      - BearerAuth: []
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventDetail'
+          description: ''
+      x-bugsink-required-capability: events:read
+  /api/canonical/0/issue-comments/:
+    post:
+      operationId: issue_comments_create
+      description: |-
+        Add a comment to an issue. `issue` accepts an issue UUID or friendly ID.
+
+        Required capability: `issues:comment`.
+      summary: Create an issue comment
+      tags:
+      - issue-comments
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IssueComment'
+        required: true
+      security:
+      - BearerAuth: []
+      - bearerAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IssueComment'
+          description: ''
+      x-bugsink-required-capability: issues:comment
+  /api/canonical/0/issue-history/:
+    get:
+      operationId: issue_history_list
+      description: |-
+        List the turning points (state changes and comments) of an issue.
+
+        Required capability: `issues:read`.
+      summary: List issue history
+      parameters:
+      - name: cursor
+        required: false
+        in: query
+        description: The pagination cursor value.
+        schema:
+          type: string
+      - in: query
+        name: issue
+        schema:
+          type: string
+        description: Filter history by issue UUID or friendly ID (required).
+        required: true
+      - in: query
+        name: order
+        schema:
+          type: string
+          enum:
+          - asc
+          - desc
+        description: 'Sort order of timestamp (default: desc).'
+      tags:
+      - issue-history
+      security:
+      - BearerAuth: []
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedTurningPointList'
+          description: ''
+      x-bugsink-required-capability: issues:read
+  /api/canonical/0/issues/:
+    get:
+      operationId: issues_list
+      description: |-
+        List issues across accessible projects, optionally limited to one project. Project-bound tokens stay within their project; personal tokens require accepted project membership (superusers can access all projects). Deleted issues and projects are excluded.
+
+        Required capability: `issues:read`.
+      summary: List issues
+      parameters:
+      - name: cursor
+        required: false
+        in: query
+        description: The pagination cursor value.
+        schema:
+          type: string
+      - in: query
+        name: order
+        schema:
+          type: string
+          enum:
+          - asc
+          - desc
+        description: 'Default: asc for a single project, desc across projects.'
+      - in: query
+        name: project
+        schema:
+          type: integer
+        description: Filter issues by project ID. Omit to list all projects accessible
+          to the token.
+      - in: query
+        name: q
+        schema:
+          type: string
+        description: Search titles as plain text and filter tags with `key:value`;
+          quote values containing spaces. Results must match the text and every tag
+          filter.
+      - in: query
+        name: sort
+        schema:
+          type: string
+          enum:
+          - digest_order
+          - digested_event_count
+          - last_seen
+        description: 'Default: digest_order for a single project, last_seen across
+          projects. digest_order requires a single project.'
+      - in: query
+        name: state
+        schema:
+          type: string
+          enum:
+          - all
+          - muted
+          - open
+          - resolved
+          - unresolved
+        description: 'Filter by issue state (default: all). Open means neither resolved
+          nor muted.'
+      tags:
+      - issues
+      security:
+      - BearerAuth: []
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedIssueList'
+          description: ''
+      x-bugsink-required-capability: issues:read
+  /api/canonical/0/issues/{id}/:
+    get:
+      operationId: issues_retrieve
+      description: |-
+        Retrieve an issue by issue UUID or friendly ID.
+
+        Required capability: `issues:read`.
+      summary: Retrieve an issue
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        description: Issue UUID or friendly ID (e.g. PROJECT-123).
+        required: true
+      tags:
+      - issues
+      security:
+      - BearerAuth: []
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Issue'
+          description: ''
+      x-bugsink-required-capability: issues:read
+    delete:
+      operationId: issues_destroy
+      description: |-
+        Delete an issue.
+
+        Required capability: `issues:delete`.
+      summary: Delete an issue
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        description: Issue UUID or friendly ID (e.g. PROJECT-123).
+        required: true
+      tags:
+      - issues
+      security:
+      - BearerAuth: []
+      - bearerAuth: []
+      responses:
+        '204':
+          description: No response body
+      x-bugsink-required-capability: issues:delete
+  /api/canonical/0/issues/{id}/event-counts/:
+    get:
+      operationId: issues_event_counts_retrieve
+      description: |-
+        Hourly counts by digest time, including evicted events. Empty hours have count zero. Defaults to 24 hours, including the incomplete current hour. Ranges must use UTC hour boundaries and fall within the last 90 days.
+
+        Required capability: `issues:read`.
+      summary: Retrieve issue event counts
+      parameters:
+      - in: query
+        name: end
+        schema:
+          type: string
+          format: date-time
+        description: Exclusive UTC hour boundary. Defaults to the end of the current
+          hour.
+      - in: path
+        name: id
+        schema:
+          type: string
+        description: Issue UUID or friendly ID (e.g. PROJECT-123).
+        required: true
+      - in: query
+        name: start
+        schema:
+          type: string
+          format: date-time
+        description: Inclusive UTC hour boundary. Defaults to 24 hours before end.
+      tags:
+      - issues
+      security:
+      - BearerAuth: []
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventCounts'
+          description: ''
+      x-bugsink-required-capability: issues:read
+  /api/canonical/0/issues/{id}/grouping/:
+    get:
+      operationId: issues_grouping_list
+      description: |-
+        List the grouping keys and mechanisms associated with this issue, ordered by ID.
+
+        Required capability: `events:read`.
+      summary: List issue grouping keys
+      parameters:
+      - name: cursor
+        required: false
+        in: query
+        description: The pagination cursor value.
+        schema:
+          type: string
+      - in: path
+        name: id
+        schema:
+          type: string
+        description: Issue UUID or friendly ID (e.g. PROJECT-123).
+        required: true
+      tags:
+      - issues
+      security:
+      - BearerAuth: []
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedGroupingList'
+          description: ''
+      x-bugsink-required-capability: events:read
+  /api/canonical/0/issues/{id}/mute/:
+    post:
+      operationId: issues_mute_create
+      description: |-
+        Mute this issue.
+
+        Required capability: `issues:triage`.
+      summary: Mute an issue
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        description: Issue UUID or friendly ID (e.g. PROJECT-123).
+        required: true
+      tags:
+      - issues
+      security:
+      - BearerAuth: []
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Issue'
+          description: ''
+      x-bugsink-required-capability: issues:triage
+  /api/canonical/0/issues/{id}/mute-for/:
+    post:
+      operationId: issues_mute_for_create
+      description: |-
+        Mute this issue for a relative period, e.g. for 3 days.
+
+        Required capability: `issues:triage`.
+      summary: Mute an issue for a period
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        description: Issue UUID or friendly ID (e.g. PROJECT-123).
+        required: true
+      tags:
+      - issues
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IssueMuteFor'
+        required: true
+      security:
+      - BearerAuth: []
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Issue'
+          description: ''
+      x-bugsink-required-capability: issues:triage
+  /api/canonical/0/issues/{id}/mute-until/:
+    post:
+      operationId: issues_mute_until_create
+      description: |-
+        Mute this issue until a threshold is reached, e.g. more than 10 events in 1 hour.
+
+        Required capability: `issues:triage`.
+      summary: Mute an issue until a threshold is reached
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        description: Issue UUID or friendly ID (e.g. PROJECT-123).
+        required: true
+      tags:
+      - issues
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IssueMuteUntil'
+        required: true
+      security:
+      - BearerAuth: []
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Issue'
+          description: ''
+      x-bugsink-required-capability: issues:triage
+  /api/canonical/0/issues/{id}/reopen/:
+    post:
+      operationId: issues_reopen_create
+      description: |-
+        Mark this resolved issue as unresolved again.
+
+        Required capability: `issues:triage`.
+      summary: Reopen an issue
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        description: Issue UUID or friendly ID (e.g. PROJECT-123).
+        required: true
+      tags:
+      - issues
+      security:
+      - BearerAuth: []
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Issue'
+          description: ''
+      x-bugsink-required-capability: issues:triage
+  /api/canonical/0/issues/{id}/resolve/:
+    post:
+      operationId: issues_resolve_create
+      description: |-
+        Mark this issue as resolved.
+
+        Required capability: `issues:triage`.
+      summary: Resolve an issue
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        description: Issue UUID or friendly ID (e.g. PROJECT-123).
+        required: true
+      tags:
+      - issues
+      security:
+      - BearerAuth: []
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Issue'
+          description: ''
+      x-bugsink-required-capability: issues:triage
+  /api/canonical/0/issues/{id}/resolve-latest/:
+    post:
+      operationId: issues_resolve_latest_create
+      description: |-
+        Mark this issue as resolved in the latest release.
+
+        Required capability: `issues:triage`.
+      summary: Resolve an issue in the latest release
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        description: Issue UUID or friendly ID (e.g. PROJECT-123).
+        required: true
+      tags:
+      - issues
+      security:
+      - BearerAuth: []
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Issue'
+          description: ''
+      x-bugsink-required-capability: issues:triage
+  /api/canonical/0/issues/{id}/resolve-next/:
+    post:
+      operationId: issues_resolve_next_create
+      description: |-
+        Mark this issue as resolved by the next release.
+
+        Required capability: `issues:triage`.
+      summary: Resolve an issue in the next release
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        description: Issue UUID or friendly ID (e.g. PROJECT-123).
+        required: true
+      tags:
+      - issues
+      security:
+      - BearerAuth: []
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Issue'
+          description: ''
+      x-bugsink-required-capability: issues:triage
+  /api/canonical/0/issues/{id}/tags/:
+    get:
+      operationId: issues_tags_list
+      description: |-
+        List stored tag values and their occurrence counts, ordered by ID. Counts are not reduced when event payloads are evicted. Includes values the UI groups under Other or hides as mostly unique.
+
+        Required capability: `events:read`.
+      summary: List issue tag values and counts
+      parameters:
+      - name: cursor
+        required: false
+        in: query
+        description: The pagination cursor value.
+        schema:
+          type: string
+      - in: path
+        name: id
+        schema:
+          type: string
+        description: Issue UUID or friendly ID (e.g. PROJECT-123).
+        required: true
+      - in: query
+        name: key
+        schema:
+          type: string
+        description: Filter by exact tag key.
+      tags:
+      - issues
+      security:
+      - BearerAuth: []
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedIssueTagList'
+          description: ''
+      x-bugsink-required-capability: events:read
+  /api/canonical/0/issues/{id}/unmute/:
+    post:
+      operationId: issues_unmute_create
+      description: |-
+        Unmute this issue.
+
+        Required capability: `issues:triage`.
+      summary: Unmute an issue
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        description: Issue UUID or friendly ID (e.g. PROJECT-123).
+        required: true
+      tags:
+      - issues
+      security:
+      - BearerAuth: []
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Issue'
+          description: ''
+      x-bugsink-required-capability: issues:triage
+  /api/canonical/0/projects/:
+    get:
+      operationId: projects_list
+      description: |-
+        List projects ordered by name.
+
+        Required capability: `projects:read`.
+      summary: List projects
+      parameters:
+      - name: cursor
+        required: false
+        in: query
+        description: The pagination cursor value.
+        schema:
+          type: string
+      - in: query
+        name: team
+        schema:
+          type: string
+          format: uuid
+        description: Optional filter by team UUID.
+      tags:
+      - projects
+      security:
+      - BearerAuth: []
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedProjectListList'
+          description: ''
+      x-bugsink-required-capability: projects:read
+    post:
+      operationId: projects_create
+      description: |-
+        Create a project. `team` is the team UUID. `visibility` and alert settings are optional.
+
+        Required capability: `projects:manage`.
+      summary: Create a project
+      tags:
+      - projects
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProjectCreate'
+        required: true
+      security:
+      - BearerAuth: []
+      - bearerAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectCreate'
+          description: ''
+      x-bugsink-required-capability: projects:manage
+  /api/canonical/0/projects/{id}/:
+    get:
+      operationId: projects_retrieve
+      description: |-
+        Retrieve a project by integer project ID. Use `expand=team` to include the team object.
+
+        Required capability: `projects:read`.
+      summary: Retrieve a project
+      parameters:
+      - in: query
+        name: expand
+        schema:
+          type: string
+          enum:
+          - team
+        description: Optional related object expansion.
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this project.
+        required: true
+      tags:
+      - projects
+      security:
+      - BearerAuth: []
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectDetail'
+          description: ''
+      x-bugsink-required-capability: projects:read
+    patch:
+      operationId: projects_partial_update
+      description: |-
+        Partially update a project by integer project ID.
+
+        Required capability: `projects:manage`.
+      summary: Update a project
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this project.
+        required: true
+      tags:
+      - projects
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedProjectUpdate'
+      security:
+      - BearerAuth: []
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectUpdate'
+          description: ''
+      x-bugsink-required-capability: projects:manage
+  /api/canonical/0/projects/{id}/event-counts/:
+    get:
+      operationId: projects_event_counts_retrieve
+      description: |-
+        Hourly counts by digest time, including evicted events. Empty hours have count zero. Defaults to 24 hours, including the incomplete current hour. Ranges must use UTC hour boundaries and fall within the last 90 days.
+
+        Required capability: `projects:read`.
+      summary: Retrieve project event counts
+      parameters:
+      - in: query
+        name: end
+        schema:
+          type: string
+          format: date-time
+        description: Exclusive UTC hour boundary. Defaults to the end of the current
+          hour.
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this project.
+        required: true
+      - in: query
+        name: start
+        schema:
+          type: string
+          format: date-time
+        description: Inclusive UTC hour boundary. Defaults to 24 hours before end.
+      tags:
+      - projects
+      security:
+      - BearerAuth: []
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventCounts'
+          description: ''
+      x-bugsink-required-capability: projects:read
+  /api/canonical/0/releases/:
+    get:
+      operationId: releases_list
+      description: |-
+        List releases for a project. Pass the integer project ID in the required `project` query parameter.
+
+        Required capability: `releases:read`.
+      summary: List releases
+      parameters:
+      - name: cursor
+        required: false
+        in: query
+        description: The pagination cursor value.
+        schema:
+          type: string
+      - in: query
+        name: project
+        schema:
+          type: integer
+        description: Filter releases by project id (required).
+        required: true
+      tags:
+      - releases
+      security:
+      - BearerAuth: []
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedReleaseListList'
+          description: ''
+      x-bugsink-required-capability: releases:read
+    post:
+      operationId: releases_create
+      description: |-
+        Create a release for a project. `project` is the integer project ID. `version` is the release version string.
+
+        Required capability: `releases:create`.
+      summary: Create a release
+      tags:
+      - releases
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReleaseCreate'
+            examples:
+              CreateRelease:
+                value:
+                  project: 1
+                  version: my-package@1.2.3
+                summary: Create release
+        required: true
+      security:
+      - BearerAuth: []
+      - bearerAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReleaseDetail'
+          description: ''
+      x-bugsink-required-capability: releases:create
+  /api/canonical/0/releases/{id}/:
+    get:
+      operationId: releases_retrieve
+      description: |-
+        Retrieve a release by release UUID.
+
+        Required capability: `releases:read`.
+      summary: Retrieve a release
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this release.
+        required: true
+      tags:
+      - releases
+      security:
+      - BearerAuth: []
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReleaseDetail'
+          description: ''
+      x-bugsink-required-capability: releases:read
+  /api/canonical/0/teams/:
+    get:
+      operationId: teams_list
+      description: |-
+        List teams ordered by name.
+
+        Required capability: `teams:read`.
+      summary: List teams
+      parameters:
+      - name: cursor
+        required: false
+        in: query
+        description: The pagination cursor value.
+        schema:
+          type: string
+      tags:
+      - teams
+      security:
+      - BearerAuth: []
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedTeamListList'
+          description: ''
+      x-bugsink-required-capability: teams:read
+    post:
+      operationId: teams_create
+      description: |-
+        Create a team. `visibility` is optional and defaults to `discoverable`.
+
+        Required capability: `teams:manage`.
+      summary: Create a team
+      tags:
+      - teams
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TeamCreateUpdate'
+        required: true
+      security:
+      - BearerAuth: []
+      - bearerAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeamCreateUpdate'
+          description: ''
+      x-bugsink-required-capability: teams:manage
+  /api/canonical/0/teams/{id}/:
+    get:
+      operationId: teams_retrieve
+      description: |-
+        Retrieve a team by UUID.
+
+        Required capability: `teams:read`.
+      summary: Retrieve a team
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this team.
+        required: true
+      tags:
+      - teams
+      security:
+      - BearerAuth: []
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeamDetail'
+          description: ''
+      x-bugsink-required-capability: teams:read
+    patch:
+      operationId: teams_partial_update
+      description: |-
+        Partially update a team by UUID.
+
+        Required capability: `teams:manage`.
+      summary: Update a team
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this team.
+        required: true
+      tags:
+      - teams
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedTeamCreateUpdate'
+      security:
+      - BearerAuth: []
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeamCreateUpdate'
+          description: ''
+      x-bugsink-required-capability: teams:manage
+  /api/0/:
+    get:
+      operationId: sentry_compatible_api_root_retrieve
+      tags:
+      - Sentry-compatible API
+      security:
+      - BearerAuth: []
+      x-bugsink-required-capability: debug-files:upload
+      summary: Support sentry-cli login checks
+      description: |-
+        This endpoint exists because sentry-cli probes Sentry's API root during its login flow. Bugsink returns the minimal Sentry-like org-token response needed for sentry-cli to accept a Bugsink auth token for release and sourcemap upload commands.
+
+        Required capability: `debug-files:upload`.
+      responses:
+        '200':
+          description: Token is valid.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                properties:
+                  version:
+                    type: string
+                  auth:
+                    type: object
+                    additionalProperties: false
+                    properties:
+                      scopes:
+                        type: array
+                        items:
+                          type: string
+                    required:
+                    - scopes
+                  user:
+                    nullable: true
+                required:
+                - version
+                - auth
+                - user
+        '401':
+          description: Authorization token is missing or invalid.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                properties:
+                  message:
+                    type: string
+                  detail:
+                    type: string
+                  error:
+                    type: string
+  /api/0/organizations/{organization_slug}/chunk-upload/:
+    get:
+      operationId: sentry_compatible_chunk_upload_settings_retrieve
+      tags:
+      - Sentry-compatible API
+      security:
+      - BearerAuth: []
+      x-bugsink-required-capability: debug-files:upload
+      summary: Get sentry-cli chunk upload settings
+      description: |-
+        This endpoint exists for sentry-cli sourcemap upload support. See the Bugsink sourcemaps documentation.
+
+        Required capability: `debug-files:upload`.
+      externalDocs:
+        description: Bugsink sourcemaps documentation
+        url: https://www.bugsink.com/docs/sourcemaps/
+      parameters:
+      - in: path
+        name: organization_slug
+        schema:
+          type: string
+        required: true
+        description: Organization slug accepted for sentry-cli compatibility.
+      responses:
+        '200':
+          description: Chunk upload settings for sentry-cli.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                properties:
+                  url:
+                    type: string
+                    format: uri
+                  chunkSize:
+                    type: integer
+                  maxRequestSize:
+                    type: integer
+                  maxFileSize:
+                    type: integer
+                  concurrency:
+                    type: integer
+                  chunksPerRequest:
+                    type: integer
+                  hashAlgorithm:
+                    type: string
+                  compression:
+                    type: array
+                    items:
+                      type: string
+                  accept:
+                    type: array
+                    items:
+                      type: string
+                required:
+                - url
+                - chunkSize
+                - maxRequestSize
+                - maxFileSize
+                - concurrency
+                - chunksPerRequest
+                - hashAlgorithm
+                - compression
+                - accept
+        '401':
+          description: Authorization token is missing or invalid.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                properties:
+                  message:
+                    type: string
+                  detail:
+                    type: string
+                  error:
+                    type: string
+    post:
+      operationId: sentry_compatible_chunk_upload_create
+      tags:
+      - Sentry-compatible API
+      security:
+      - BearerAuth: []
+      x-bugsink-required-capability: debug-files:upload
+      summary: Upload sentry-cli file chunks
+      description: |-
+        This endpoint exists for sentry-cli sourcemap upload support. It accepts chunk files named by sha1 checksum. See the Bugsink sourcemaps documentation.
+
+        Required capability: `debug-files:upload`.
+      externalDocs:
+        description: Bugsink sourcemaps documentation
+        url: https://www.bugsink.com/docs/sourcemaps/
+      parameters:
+      - in: path
+        name: organization_slug
+        schema:
+          type: string
+        required: true
+        description: Organization slug accepted for sentry-cli compatibility.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              additionalProperties: true
+        description: Multipart form data with `file` and/or `file_gzip` file fields.
+      responses:
+        '200':
+          description: Chunks accepted.
+        '401':
+          description: Authorization token is missing or invalid.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                properties:
+                  message:
+                    type: string
+                  detail:
+                    type: string
+                  error:
+                    type: string
+        '413':
+          description: Uploaded chunk is too large.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                properties:
+                  message:
+                    type: string
+                  detail:
+                    type: string
+                  error:
+                    type: string
+  /api/0/organizations/{organization_slug}/artifactbundle/assemble/:
+    post:
+      operationId: sentry_compatible_artifact_bundle_assemble_create
+      tags:
+      - Sentry-compatible API
+      security:
+      - BearerAuth: []
+      x-bugsink-required-capability: debug-files:upload
+      summary: Assemble a sentry-cli artifact bundle
+      description: |-
+        This endpoint exists for sentry-cli sourcemap upload support. It reports missing chunks or queues artifact bundle assembly. See the Bugsink sourcemaps documentation.
+
+        Required capability: `debug-files:upload`.
+      externalDocs:
+        description: Bugsink sourcemaps documentation
+        url: https://www.bugsink.com/docs/sourcemaps/
+      parameters:
+      - in: path
+        name: organization_slug
+        schema:
+          type: string
+        required: true
+        description: Organization slug accepted for sentry-cli compatibility.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+              properties:
+                checksum:
+                  type: string
+                chunks:
+                  type: array
+                  items:
+                    type: string
+                projects:
+                  type: array
+                  items:
+                    type: string
+              required:
+              - checksum
+              - chunks
+              - projects
+      responses:
+        '200':
+          description: Assembly state.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                properties:
+                  state:
+                    type: string
+                  missingChunks:
+                    type: array
+                    items:
+                      type: string
+                required:
+                - state
+                - missingChunks
+        '400':
+          description: Project information is missing or invalid.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                properties:
+                  message:
+                    type: string
+                  detail:
+                    type: string
+                  error:
+                    type: string
+        '401':
+          description: Authorization token is missing or invalid.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                properties:
+                  message:
+                    type: string
+                  detail:
+                    type: string
+                  error:
+                    type: string
+  /api/0/projects/{organization_slug}/{project_slug}/files/difs/assemble/:
+    post:
+      operationId: sentry_compatible_difs_assemble_create
+      tags:
+      - Sentry-compatible API
+      security:
+      - BearerAuth: []
+      x-bugsink-required-capability: debug-files:upload
+      summary: Assemble sentry-cli debug information files
+      description: |-
+        This endpoint exists for Sentry native debug file upload compatibility through sentry-cli. Bugsink uses the same file upload machinery as sourcemaps where possible.
+
+        Required capability: `debug-files:upload`.
+      parameters:
+      - in: path
+        name: organization_slug
+        schema:
+          type: string
+        required: true
+        description: Organization slug accepted for sentry-cli compatibility.
+      - in: path
+        name: project_slug
+        schema:
+          type: string
+        required: true
+        description: Existing Bugsink project slug.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties:
+                type: object
+                additionalProperties: true
+                properties:
+                  chunks:
+                    type: array
+                    items:
+                      type: string
+                  name:
+                    type: string
+                  debug_id:
+                    type: string
+      responses:
+        '200':
+          description: Per-file assembly state.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties:
+                  type: object
+                  additionalProperties: false
+                  properties:
+                    state:
+                      type: string
+                    missingChunks:
+                      type: array
+                      items:
+                        type: string
+                  required:
+                  - state
+                  - missingChunks
+        '401':
+          description: Authorization token is missing or invalid.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                properties:
+                  message:
+                    type: string
+                  detail:
+                    type: string
+                  error:
+                    type: string
+        '404':
+          description: Minidumps are disabled or the project does not exist.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                properties:
+                  message:
+                    type: string
+                  detail:
+                    type: string
+                  error:
+                    type: string
+  /api/{project_pk}/store/:
+    post:
+      operationId: sentry_compatible_store_create
+      tags:
+      - Sentry-compatible API
+      security:
+      - SentryAuthHeader: []
+      - SentryKeyQuery: []
+      summary: Ingest an event through Sentry's deprecated store endpoint
+      description: 'This endpoint exists for Sentry SDK compatibility. Authenticate
+        with Sentry SDK auth: `X-Sentry-Auth` or `?sentry_key=...`. This is Sentry''s
+        deprecated event ingestion endpoint, kept for compatibility with older SDKs.
+        Prefer the envelope endpoint when using SDKs that support it.'
+      parameters:
+      - in: path
+        name: project_pk
+        schema:
+          type: integer
+        required: true
+        description: Integer Bugsink project id.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+        description: Sentry event JSON.
+      responses:
+        '200':
+          description: Accepted event id.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                properties:
+                  id:
+                    type: string
+                required:
+                - id
+        '400':
+          description: Event payload is invalid.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                properties:
+                  message:
+                    type: string
+                  detail:
+                    type: string
+                  error:
+                    type: string
+        '403':
+          description: Project auth failed.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                properties:
+                  message:
+                    type: string
+                  detail:
+                    type: string
+                  error:
+                    type: string
+        '413':
+          description: Event payload is too large.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                properties:
+                  message:
+                    type: string
+                  detail:
+                    type: string
+                  error:
+                    type: string
+        '429':
+          description: Ingestion rate limit exceeded.
+  /api/{project_pk}/envelope/:
+    post:
+      operationId: sentry_compatible_envelope_create
+      tags:
+      - Sentry-compatible API
+      security:
+      - SentryAuthHeader: []
+      - SentryKeyQuery: []
+      summary: Ingest a Sentry envelope
+      description: 'This endpoint exists for Sentry SDK compatibility. Authenticate
+        with Sentry SDK auth: `X-Sentry-Auth` or `?sentry_key=...`. This is the primary
+        Sentry SDK ingestion endpoint. Envelope DSN authentication is also accepted
+        when present in the envelope headers.'
+      externalDocs:
+        description: Sentry envelope data model
+        url: https://develop.sentry.dev/sdk/envelopes/#data-model
+      parameters:
+      - in: path
+        name: project_pk
+        schema:
+          type: integer
+        required: true
+        description: Integer Bugsink project id.
+      requestBody:
+        required: true
+        content:
+          application/x-sentry-envelope:
+            schema:
+              type: string
+              format: binary
+        description: Sentry envelope payload.
+      responses:
+        '200':
+          description: 'Envelope accepted. Event envelopes may return `{id: ...}`.'
+        '400':
+          description: Envelope payload is invalid.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                properties:
+                  message:
+                    type: string
+                  detail:
+                    type: string
+                  error:
+                    type: string
+        '403':
+          description: Project auth failed.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                properties:
+                  message:
+                    type: string
+                  detail:
+                    type: string
+                  error:
+                    type: string
+        '413':
+          description: Envelope payload is too large.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                properties:
+                  message:
+                    type: string
+                  detail:
+                    type: string
+                  error:
+                    type: string
+        '429':
+          description: Ingestion rate limit exceeded.
+  /api/{project_pk}/minidump/:
+    post:
+      operationId: sentry_compatible_minidump_create
+      tags:
+      - Sentry-compatible API
+      security:
+      - SentryAuthHeader: []
+      - SentryKeyQuery: []
+      summary: Ingest a Sentry native minidump
+      description: 'This endpoint exists for Sentry SDK compatibility. Authenticate
+        with Sentry SDK auth: `X-Sentry-Auth` or `?sentry_key=...`. This endpoint
+        exists for Sentry native/minidump upload compatibility.'
+      parameters:
+      - in: path
+        name: project_pk
+        schema:
+          type: integer
+        required: true
+        description: Integer Bugsink project id.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              additionalProperties: true
+              properties:
+                upload_file_minidump:
+                  type: string
+                  format: binary
+              required:
+              - upload_file_minidump
+        description: Multipart form data containing `upload_file_minidump`.
+      responses:
+        '200':
+          description: Accepted event id.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                properties:
+                  id:
+                    type: string
+                required:
+                - id
+        '400':
+          description: Minidump payload is invalid.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                properties:
+                  message:
+                    type: string
+                  detail:
+                    type: string
+                  error:
+                    type: string
+        '403':
+          description: Project auth failed.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                properties:
+                  message:
+                    type: string
+                  detail:
+                    type: string
+                  error:
+                    type: string
+        '404':
+          description: Minidumps are disabled.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                properties:
+                  message:
+                    type: string
+                  detail:
+                    type: string
+                  error:
+                    type: string
+  /api/{project_pk}/security/:
+    post:
+      operationId: csp_report_create
+      tags:
+      - CSP reporting
+      security:
+      - SentryKeyQuery: []
+      summary: Ingest a CSP report
+      description: This endpoint accepts browser-emitted CSP violation reports from
+        the `report-uri` directive. Authenticate with `?sentry_key=...`; browsers
+        cannot set custom auth headers on CSP report posts.
+      parameters:
+      - in: path
+        name: project_pk
+        schema:
+          type: integer
+        required: true
+        description: Integer Bugsink project id.
+      requestBody:
+        required: true
+        content:
+          application/csp-report:
+            schema:
+              type: object
+              additionalProperties: true
+              properties:
+                csp-report:
+                  type: object
+                  additionalProperties: true
+              required:
+              - csp-report
+        description: CSP report JSON.
+      responses:
+        '200':
+          description: CSP report accepted.
+        '400':
+          description: CSP report payload is invalid.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                properties:
+                  message:
+                    type: string
+                  detail:
+                    type: string
+                  error:
+                    type: string
+        '403':
+          description: Project auth failed.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                properties:
+                  message:
+                    type: string
+                  detail:
+                    type: string
+                  error:
+                    type: string
+        '413':
+          description: CSP report is too large.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                properties:
+                  message:
+                    type: string
+                  detail:
+                    type: string
+                  error:
+                    type: string
+        '429':
+          description: Ingestion rate limit exceeded.
+components:
+  schemas:
+    EventCountBucket:
+      type: object
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+        count:
+          type: integer
+      required:
+      - count
+      - timestamp
+    EventCounts:
+      type: object
+      properties:
+        start:
+          type: string
+          format: date-time
+        end:
+          type: string
+          format: date-time
+        interval_seconds:
+          type: integer
+        buckets:
+          type: array
+          items:
+            $ref: '#/components/schemas/EventCountBucket'
+      required:
+      - buckets
+      - end
+      - interval_seconds
+      - start
+    EventDetail:
+      type: object
+      description: 'Detail view: includes full `data` payload.'
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+          description: Bugsink-internal
+        ingested_at:
+          type: string
+          format: date-time
+        digested_at:
+          type: string
+          format: date-time
+        issue:
+          type: string
+          format: uuid
+        grouping:
+          type: integer
+        event_id:
+          type: string
+          format: uuid
+          readOnly: true
+          description: As per the sent data
+        project:
+          type: integer
+        timestamp:
+          type: string
+          format: date-time
+        digest_order:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        data:
+          readOnly: true
+        stacktrace_md:
+          type: string
+          readOnly: true
+      required:
+      - data
+      - digest_order
+      - digested_at
+      - event_id
+      - grouping
+      - id
+      - ingested_at
+      - issue
+      - project
+      - stacktrace_md
+      - timestamp
+    EventList:
+      type: object
+      description: 'Lightweight list view: excludes the (potentially large) `data`
+        field.'
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+          description: Bugsink-internal
+        ingested_at:
+          type: string
+          format: date-time
+        digested_at:
+          type: string
+          format: date-time
+        issue:
+          type: string
+          format: uuid
+        grouping:
+          type: integer
+        event_id:
+          type: string
+          format: uuid
+          readOnly: true
+          description: As per the sent data
+        project:
+          type: integer
+        timestamp:
+          type: string
+          format: date-time
+        digest_order:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+      required:
+      - digest_order
+      - digested_at
+      - event_id
+      - grouping
+      - id
+      - ingested_at
+      - issue
+      - project
+      - timestamp
+    Grouping:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        grouping_key:
+          type: string
+          readOnly: true
+        grouping_mechanism:
+          allOf:
+          - $ref: '#/components/schemas/GroupingKeyMechanismEnum'
+          readOnly: true
+      required:
+      - grouping_key
+      - grouping_mechanism
+      - id
+    GroupingKeyMechanismEnum:
+      enum:
+      - none
+      - bugsink-v1
+      - bugsink-v2
+      type: string
+      description: |-
+        * `none` - Mechanism-independent (explicit fingerprint)
+        * `bugsink-v1` - Original, default until v2.4.0 (July 2026)
+        * `bugsink-v2` - Value-normalized (latest)
+    GroupingMechanismEnum:
+      enum:
+      - bugsink-v1
+      - bugsink-v2
+      type: string
+      description: |-
+        * `bugsink-v1` - Original, default until v2.4.0 (July 2026)
+        * `bugsink-v2` - Value-normalized (latest)
+    Issue:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        friendly_id:
+          type: string
+          readOnly: true
+        project:
+          type: integer
+        digest_order:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        last_seen:
+          type: string
+          format: date-time
+        first_seen:
+          type: string
+          format: date-time
+        digested_event_count:
+          type: integer
+          maximum: 2147483647
+          minimum: -2147483648
+        stored_event_count:
+          type: integer
+          readOnly: true
+        calculated_type:
+          type: string
+          maxLength: 128
+        calculated_value:
+          type: string
+          maxLength: 1024
+        transaction:
+          type: string
+          maxLength: 200
+        is_resolved:
+          type: boolean
+        is_resolved_unconditionally:
+          type: boolean
+        is_resolved_by_next_release:
+          type: boolean
+        fixed_at:
+          type: array
+          items:
+            type: string
+          readOnly: true
+          description: Release versions at which this issue was marked fixed.
+        events_at:
+          type: array
+          items:
+            type: string
+          readOnly: true
+          description: Release versions in which events were seen. An empty string
+            means no release was supplied.
+        is_muted:
+          type: boolean
+        unmute_after:
+          type: string
+          format: date-time
+          nullable: true
+        unmute_on_volume_based_conditions:
+          type: array
+          items:
+            $ref: '#/components/schemas/UnmuteVolumeCondition'
+          readOnly: true
+          description: 'Unmute when any condition is met: at least volume events within
+            nr_of_periods of period.'
+      required:
+      - digest_order
+      - digested_event_count
+      - events_at
+      - first_seen
+      - fixed_at
+      - friendly_id
+      - id
+      - last_seen
+      - project
+      - stored_event_count
+      - unmute_on_volume_based_conditions
+    IssueComment:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        issue:
+          type: string
+        project:
+          type: integer
+          readOnly: true
+        timestamp:
+          type: string
+          format: date-time
+          readOnly: true
+        comment:
+          type: string
+        user:
+          type: integer
+          readOnly: true
+          nullable: true
+      required:
+      - comment
+      - id
+      - issue
+      - project
+      - timestamp
+      - user
+    IssueMuteFor:
+      type: object
+      properties:
+        period_name:
+          $ref: '#/components/schemas/PeriodNameEnum'
+        nr_of_periods:
+          type: integer
+          minimum: 1
+      required:
+      - nr_of_periods
+      - period_name
+    IssueMuteUntil:
+      type: object
+      properties:
+        period_name:
+          $ref: '#/components/schemas/PeriodNameEnum'
+        nr_of_periods:
+          type: integer
+          minimum: 1
+        gte_threshold:
+          type: integer
+          minimum: 1
+      required:
+      - gte_threshold
+      - nr_of_periods
+      - period_name
+    IssueTag:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        key:
+          type: string
+          readOnly: true
+        value:
+          type: string
+          readOnly: true
+        count:
+          type: integer
+          readOnly: true
+      required:
+      - count
+      - id
+      - key
+      - value
+    KindEnum:
+      enum:
+      - first_seen
+      - resolved
+      - muted
+      - regressed
+      - unmuted
+      - reopened
+      - next_materialized
+      - manual_annotation
+      type: string
+      description: |-
+        * `first_seen` - first_seen
+        * `resolved` - resolved
+        * `muted` - muted
+        * `regressed` - regressed
+        * `unmuted` - unmuted
+        * `reopened` - reopened
+        * `next_materialized` - next_materialized
+        * `manual_annotation` - manual_annotation
+    PaginatedEventListList:
+      type: object
+      required:
+      - results
+      properties:
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?cursor=cD00ODY%3D"
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?cursor=cj0xJnA9NDg3
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/EventList'
+    PaginatedGroupingList:
+      type: object
+      required:
+      - results
+      properties:
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?cursor=cD00ODY%3D"
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?cursor=cj0xJnA9NDg3
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Grouping'
+    PaginatedIssueList:
+      type: object
+      required:
+      - results
+      properties:
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?cursor=cD00ODY%3D"
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?cursor=cj0xJnA9NDg3
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Issue'
+    PaginatedIssueTagList:
+      type: object
+      required:
+      - results
+      properties:
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?cursor=cD00ODY%3D"
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?cursor=cj0xJnA9NDg3
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/IssueTag'
+    PaginatedProjectListList:
+      type: object
+      required:
+      - results
+      properties:
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?cursor=cD00ODY%3D"
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?cursor=cj0xJnA9NDg3
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProjectList'
+    PaginatedReleaseListList:
+      type: object
+      required:
+      - results
+      properties:
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?cursor=cD00ODY%3D"
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?cursor=cj0xJnA9NDg3
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReleaseList'
+    PaginatedTeamListList:
+      type: object
+      required:
+      - results
+      properties:
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?cursor=cD00ODY%3D"
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?cursor=cj0xJnA9NDg3
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/TeamList'
+    PaginatedTurningPointList:
+      type: object
+      required:
+      - results
+      properties:
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?cursor=cD00ODY%3D"
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?cursor=cj0xJnA9NDg3
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/TurningPoint'
+    PatchedProjectUpdate:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        team:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+          maxLength: 255
+        visibility:
+          $ref: '#/components/schemas/ProjectVisibilityEnum'
+        alert_on_new_issue:
+          type: boolean
+        alert_on_regression:
+          type: boolean
+        alert_on_unmute:
+          type: boolean
+        retention_max_event_count:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+    PatchedTeamCreateUpdate:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+          maxLength: 255
+        visibility:
+          $ref: '#/components/schemas/TeamVisibilityEnum'
+    PeriodNameEnum:
+      enum:
+      - year
+      - month
+      - week
+      - day
+      - hour
+      - minute
+      type: string
+      description: |-
+        * `year` - year
+        * `month` - month
+        * `week` - week
+        * `day` - day
+        * `hour` - hour
+        * `minute` - minute
+    ProjectCreate:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        team:
+          type: string
+          format: uuid
+        name:
+          type: string
+          maxLength: 255
+        visibility:
+          $ref: '#/components/schemas/ProjectVisibilityEnum'
+        alert_on_new_issue:
+          type: boolean
+        alert_on_regression:
+          type: boolean
+        alert_on_unmute:
+          type: boolean
+        retention_max_event_count:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+      required:
+      - id
+      - name
+      - team
+    ProjectDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        team:
+          type: string
+          format: uuid
+          nullable: true
+        name:
+          type: string
+          maxLength: 255
+        slug:
+          type: string
+          maxLength: 50
+          pattern: ^[-a-zA-Z0-9_]+$
+        dsn:
+          type: string
+          readOnly: true
+        digested_event_count:
+          type: integer
+          readOnly: true
+        stored_event_count:
+          type: integer
+          readOnly: true
+        alert_on_new_issue:
+          type: boolean
+        alert_on_regression:
+          type: boolean
+        alert_on_unmute:
+          type: boolean
+        visibility:
+          $ref: '#/components/schemas/ProjectVisibilityEnum'
+        retention_max_event_count:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        grouping_mechanism:
+          $ref: '#/components/schemas/GroupingMechanismEnum'
+      required:
+      - digested_event_count
+      - dsn
+      - id
+      - name
+      - slug
+      - stored_event_count
+      - visibility
+    ProjectList:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        team:
+          type: string
+          format: uuid
+          nullable: true
+        name:
+          type: string
+          maxLength: 255
+        slug:
+          type: string
+          maxLength: 50
+          pattern: ^[-a-zA-Z0-9_]+$
+        dsn:
+          type: string
+          readOnly: true
+        digested_event_count:
+          type: integer
+          readOnly: true
+        stored_event_count:
+          type: integer
+          readOnly: true
+        alert_on_new_issue:
+          type: boolean
+        alert_on_regression:
+          type: boolean
+        alert_on_unmute:
+          type: boolean
+        visibility:
+          $ref: '#/components/schemas/ProjectVisibilityEnum'
+        retention_max_event_count:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        grouping_mechanism:
+          $ref: '#/components/schemas/GroupingMechanismEnum'
+      required:
+      - digested_event_count
+      - dsn
+      - id
+      - name
+      - slug
+      - stored_event_count
+      - visibility
+    ProjectUpdate:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        team:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+          maxLength: 255
+        visibility:
+          $ref: '#/components/schemas/ProjectVisibilityEnum'
+        alert_on_new_issue:
+          type: boolean
+        alert_on_regression:
+          type: boolean
+        alert_on_unmute:
+          type: boolean
+        retention_max_event_count:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+      required:
+      - id
+      - name
+      - team
+    ProjectVisibilityEnum:
+      enum:
+      - joinable
+      - discoverable
+      - team_members
+      type: string
+      description: |-
+        * `joinable` - joinable
+        * `discoverable` - discoverable
+        * `team_members` - team_members
+    ReleaseCreate:
+      type: object
+      properties:
+        project:
+          type: integer
+        version:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+      required:
+      - project
+      - version
+    ReleaseDetail:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        project:
+          type: integer
+        version:
+          type: string
+          maxLength: 250
+        date_released:
+          type: string
+          format: date-time
+        semver:
+          type: string
+          readOnly: true
+        is_semver:
+          type: boolean
+          readOnly: true
+        sort_epoch:
+          type: integer
+          readOnly: true
+      required:
+      - id
+      - is_semver
+      - project
+      - semver
+      - sort_epoch
+      - version
+    ReleaseList:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        project:
+          type: integer
+        version:
+          type: string
+          maxLength: 250
+        date_released:
+          type: string
+          format: date-time
+      required:
+      - id
+      - project
+      - version
+    TeamCreateUpdate:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+          maxLength: 255
+        visibility:
+          $ref: '#/components/schemas/TeamVisibilityEnum'
+      required:
+      - id
+      - name
+    TeamDetail:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+          maxLength: 255
+        visibility:
+          $ref: '#/components/schemas/TeamVisibilityEnum'
+      required:
+      - id
+      - name
+      - visibility
+    TeamList:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+          maxLength: 255
+        visibility:
+          $ref: '#/components/schemas/TeamVisibilityEnum'
+      required:
+      - id
+      - name
+      - visibility
+    TeamVisibilityEnum:
+      enum:
+      - joinable
+      - discoverable
+      - hidden
+      type: string
+      description: |-
+        * `joinable` - joinable
+        * `discoverable` - discoverable
+        * `hidden` - hidden
+    TurningPoint:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        issue:
+          type: string
+          format: uuid
+          readOnly: true
+        project:
+          type: integer
+          readOnly: true
+        triggering_event:
+          type: string
+          format: uuid
+          description: Bugsink-internal
+          readOnly: true
+          nullable: true
+        user:
+          type: integer
+          readOnly: true
+          nullable: true
+        user_display_name:
+          type: string
+          nullable: true
+          readOnly: true
+          description: Author's full name or username; null when no user is recorded.
+        timestamp:
+          type: string
+          format: date-time
+          readOnly: true
+        kind:
+          allOf:
+          - $ref: '#/components/schemas/KindEnum'
+          readOnly: true
+        comment:
+          type: string
+          readOnly: true
+        metadata:
+          readOnly: true
+          description: |-
+            Details of the state change, depending on `kind`:
+
+            - `resolved`: `resolved_unconditionally`, `resolve_by_next`, or `resolved_release`.
+            - `muted`: `mute_unconditionally`, `mute_for` (`period_name`, `nr_of_periods`, `unmute_after`), or `mute_until` (`period_name`, `nr_of_periods`, `gte_threshold`).
+            - `unmuted`: `{}` for manual unmuting; `mute_for` (`unmute_after`) or `mute_until` (`period`, `nr_of_periods`, `volume`) for automatic unmuting.
+            - `next_materialized`: `actual_release` names the release that fulfilled resolve-by-next.
+
+            Other kinds normally have `{}`. Release values are version strings; `unmute_after` is a UTC timestamp. Thresholds may be strings or numbers.
+      required:
+      - comment
+      - id
+      - issue
+      - kind
+      - metadata
+      - project
+      - timestamp
+      - triggering_event
+      - user
+      - user_display_name
+    UnmuteVolumeCondition:
+      type: object
+      properties:
+        period:
+          type: string
+          description: Period unit, e.g. hour or day.
+        nr_of_periods:
+          type: integer
+        volume:
+          type: integer
+      required:
+      - nr_of_periods
+      - period
+      - volume
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: token
+    SentryAuthHeader:
+      type: apiKey
+      in: header
+      name: X-Sentry-Auth
+    SentryKeyQuery:
+      type: apiKey
+      in: query
+      name: sentry_key
+tags:
+- name: events
+- name: issue-comments
+- name: issue-history
+- name: issues
+- name: projects
+- name: releases
+- name: teams
+- name: Sentry-compatible API
+  description: '`/api/0` and `/api/{project_pk}/` paths exist for Sentry-SDK / sentry-cli
+    compatibility (as opposed to the `/api/canonical/` paths which are Bugsink-specific).'
+- name: CSP reporting
+  description: Native support for browser CSP violation reports emitted through the
+    `report-uri` directive. Reports are translated into Bugsink events and processed
+    through the normal ingest pipeline.
+x-bugsink-capabilities:
+  issues:read:
+    description: View issues and their details.
+    operations:
+    - method: GET
+      path: /api/canonical/0/issue-history/
+      operationId: issue_history_list
+    - method: GET
+      path: /api/canonical/0/issues/
+      operationId: issues_list
+    - method: GET
+      path: /api/canonical/0/issues/{id}/
+      operationId: issues_retrieve
+    - method: GET
+      path: /api/canonical/0/issues/{id}/event-counts/
+      operationId: issues_event_counts_retrieve
+  events:read:
+    description: View events, including event data and stacktraces.
+    operations:
+    - method: GET
+      path: /api/canonical/0/events/
+      operationId: events_list
+    - method: GET
+      path: /api/canonical/0/events/{id}/
+      operationId: events_retrieve
+    - method: GET
+      path: /api/canonical/0/events/{id}/stacktrace/
+      operationId: events_stacktrace_retrieve
+    - method: GET
+      path: /api/canonical/0/events/lookup/
+      operationId: events_lookup_retrieve
+    - method: GET
+      path: /api/canonical/0/issues/{id}/grouping/
+      operationId: issues_grouping_list
+    - method: GET
+      path: /api/canonical/0/issues/{id}/tags/
+      operationId: issues_tags_list
+  issues:comment:
+    description: Add comments to issues.
+    operations:
+    - method: POST
+      path: /api/canonical/0/issue-comments/
+      operationId: issue_comments_create
+  issues:triage:
+    description: Resolve, reopen, mute, and unmute issues.
+    operations:
+    - method: POST
+      path: /api/canonical/0/issues/{id}/mute/
+      operationId: issues_mute_create
+    - method: POST
+      path: /api/canonical/0/issues/{id}/mute-for/
+      operationId: issues_mute_for_create
+    - method: POST
+      path: /api/canonical/0/issues/{id}/mute-until/
+      operationId: issues_mute_until_create
+    - method: POST
+      path: /api/canonical/0/issues/{id}/reopen/
+      operationId: issues_reopen_create
+    - method: POST
+      path: /api/canonical/0/issues/{id}/resolve/
+      operationId: issues_resolve_create
+    - method: POST
+      path: /api/canonical/0/issues/{id}/resolve-latest/
+      operationId: issues_resolve_latest_create
+    - method: POST
+      path: /api/canonical/0/issues/{id}/resolve-next/
+      operationId: issues_resolve_next_create
+    - method: POST
+      path: /api/canonical/0/issues/{id}/unmute/
+      operationId: issues_unmute_create
+  issues:delete:
+    description: Delete issues.
+    operations:
+    - method: DELETE
+      path: /api/canonical/0/issues/{id}/
+      operationId: issues_destroy
+  releases:read:
+    description: View releases and their details.
+    operations:
+    - method: GET
+      path: /api/canonical/0/releases/
+      operationId: releases_list
+    - method: GET
+      path: /api/canonical/0/releases/{id}/
+      operationId: releases_retrieve
+  releases:create:
+    description: Create releases.
+    operations:
+    - method: POST
+      path: /api/canonical/0/releases/
+      operationId: releases_create
+  debug-files:upload:
+    description: Upload and assemble debug files and artifact bundles.
+    operations:
+    - method: GET
+      path: /api/0/
+      operationId: sentry_compatible_api_root_retrieve
+    - method: GET
+      path: /api/0/organizations/{organization_slug}/chunk-upload/
+      operationId: sentry_compatible_chunk_upload_settings_retrieve
+    - method: POST
+      path: /api/0/organizations/{organization_slug}/chunk-upload/
+      operationId: sentry_compatible_chunk_upload_create
+    - method: POST
+      path: /api/0/organizations/{organization_slug}/artifactbundle/assemble/
+      operationId: sentry_compatible_artifact_bundle_assemble_create
+    - method: POST
+      path: /api/0/projects/{organization_slug}/{project_slug}/files/difs/assemble/
+      operationId: sentry_compatible_difs_assemble_create
+  projects:read:
+    description: View projects and their details.
+    operations:
+    - method: GET
+      path: /api/canonical/0/projects/
+      operationId: projects_list
+    - method: GET
+      path: /api/canonical/0/projects/{id}/
+      operationId: projects_retrieve
+    - method: GET
+      path: /api/canonical/0/projects/{id}/event-counts/
+      operationId: projects_event_counts_retrieve
+  projects:manage:
+    description: Create and update projects.
+    operations:
+    - method: POST
+      path: /api/canonical/0/projects/
+      operationId: projects_create
+    - method: PATCH
+      path: /api/canonical/0/projects/{id}/
+      operationId: projects_partial_update
+  teams:read:
+    description: View teams and their details.
+    operations:
+    - method: GET
+      path: /api/canonical/0/teams/
+      operationId: teams_list
+    - method: GET
+      path: /api/canonical/0/teams/{id}/
+      operationId: teams_retrieve
+  teams:manage:
+    description: Create and update teams.
+    operations:
+    - method: POST
+      path: /api/canonical/0/teams/
+      operationId: teams_create
+    - method: PATCH
+      path: /api/canonical/0/teams/{id}/
+      operationId: teams_partial_update
