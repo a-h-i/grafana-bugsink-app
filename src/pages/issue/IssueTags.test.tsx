@@ -3,6 +3,7 @@ import React from 'react';
 import { render, screen } from '@testing-library/react';
 import { IssueTags as Tags } from '../../datasource/types';
 import { IssueTags } from './IssueTags';
+import { loadTable } from '../../testing/loadTable';
 
 const values = [
   { value: 'development', count: 26 },
@@ -12,6 +13,8 @@ const values = [
 function renderTags(tags: Tags) {
   return render(<IssueTags tags={tags} />);
 }
+
+beforeAll(loadTable);
 
 describe('IssueTags', () => {
   it('lists the values of a key with their counts', () => {

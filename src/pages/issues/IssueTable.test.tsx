@@ -8,6 +8,7 @@ import { limiter } from '../../datasource/limiter';
 import { SPARKLINE_CONCURRENCY } from '../../datasource/datasource';
 import { IssueTable, PAGE_SIZE } from './IssueTable';
 import { VolumeSource } from './IssueTableContext';
+import { loadTable } from '../../testing/loadTable';
 
 function row(overrides: Partial<IssueRow> = {}): IssueRow {
   return {
@@ -54,6 +55,8 @@ function renderTable(rows: IssueRow[], triage?: Triage, source: VolumeSource = p
 
 const manyRows = (count: number) =>
   Array.from({ length: count }, (_, i) => row({ id: `id${i}`, friendlyId: `SAMPLE-PYTHON-${i + 1}` }));
+
+beforeAll(loadTable);
 
 describe('IssueTable', () => {
   it('shows the columns in order without sort buttons', () => {

@@ -3,6 +3,7 @@ import React from 'react';
 import { render, screen } from '@testing-library/react';
 import { Breadcrumb } from '../../datasource/types';
 import { Breadcrumbs } from './Breadcrumbs';
+import { loadTable } from '../../testing/loadTable';
 
 function crumb(overrides: Partial<Breadcrumb> = {}): Breadcrumb {
   return {
@@ -15,6 +16,8 @@ function crumb(overrides: Partial<Breadcrumb> = {}): Breadcrumb {
     ...overrides,
   };
 }
+
+beforeAll(loadTable);
 
 describe('Breadcrumbs', () => {
   it('has the five columns', () => {

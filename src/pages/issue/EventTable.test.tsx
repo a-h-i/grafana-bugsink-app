@@ -4,6 +4,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { EventRow } from '../../datasource/types';
 import { EventTable } from './EventTable';
+import { loadTable } from '../../testing/loadTable';
 
 function row(overrides: Partial<EventRow> = {}): EventRow {
   return {
@@ -27,6 +28,8 @@ function renderTable(rows: EventRow[], selectedId?: string) {
     </MemoryRouter>
   );
 }
+
+beforeAll(loadTable);
 
 describe('EventTable', () => {
   it('shows the columns in order', () => {
