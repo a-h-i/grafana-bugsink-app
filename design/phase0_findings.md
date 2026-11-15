@@ -381,7 +381,7 @@ Edits made in this change (S = spec, R = roadmap):
 | R7 | Roadmap | M10 | Open-issue count costs a page-through; "Needs first" line | Q10 |
 | R8 | Roadmap | Open decisions | Eight rows for the new spec §10 questions | Q4, Q5, Q7, Q8, Other findings, Q10, Q11 |
 
-Consequences that need a decision, not an edit (all recorded in spec §10):
+Consequences that need a decision, not an edit (all recorded in spec §10, where seven were decided on 2026-11-15):
 
 | Decision | Needed by | Why |
 | :--- | :--- | :--- |

@@ -66,9 +66,10 @@
 
 ### A. Authentication & Configuration
 * **Token:** a Bugsink API token in `secureJsonData`. Recommended: a global service token with `projects:read`, `issues:read`, `events:read`, plus `issues:triage` and `issues:comment` when triage is enabled.
-* **Project-bound tokens** are supported: `GET /projects/` returns only the token's own project (how the config editor uses this: §10).
+* **Project-bound tokens** are supported: `GET /projects/` returns only the token's own project. The config editor discovers the project from it and has no project id field.
 * **Health check:** confirms the base URL, the token, and which configured features the token's capabilities allow (for example "triage enabled but token lacks `issues:triage`").
-  * No endpoint reports a token's capabilities. `GET /api/0/` returns `auth.scopes`, but it needs `debug-files:upload` and returned `["org:ci"]` for the tokens tried, one with `debug-files:upload` and one with it plus `issues:read` (observed by hand, findings Q4). Each operation needs one (`x-bugsink-required-capability` in the schema), so a client learns a capability only by calling an operation that needs it and reading the refusal (§10).
+  * No endpoint reports a token's capabilities. `GET /api/0/` returns `auth.scopes`, but it needs `debug-files:upload` and returned `["org:ci"]` for the tokens tried, one with `debug-files:upload` and one with it plus `issues:read` (observed by hand, findings Q4). Each operation needs one (`x-bugsink-required-capability` in the schema), so a client learns a capability only by calling an operation that needs it and reading the refusal.
+  * The health check makes one read per capability that the configured features need, and no others (with triage off, nothing is checked for triage). The write capabilities (`issues:triage`, `issues:comment`) cannot be checked without a side effect: the health check reports them as not verified, and the first action that is refused shows Bugsink's 403.
   * A 401 means a missing or bad token. A 403 whose body names a capability (`This token does not have the required capability: projects:read.`) means that capability is missing; a 403 without one (`This token is not allowed to access this project.`) means the project is not the token's.
 
 ### B. Issue Queries
@@ -82,9 +83,9 @@
 * **Issue extras:** tag values with counts (`issues/{id}/tags/`, needs `events:read`), issue history (state changes and comments with author names, `GET /issue-history/?issue=`), hourly event counts (`issues/{id}/event-counts/`).
 
 ### C. Event Queries
-* **Event list** for one issue (`issue` is required, `q` search): `id`, `event_id`, `timestamp`, `ingested_at`. The list is ordered by `digest_order` (arrival order), newest first by default; there is no sort by event `timestamp`.
+* **Event list** for one issue (`issue` is required, `q` search): `id`, `event_id`, `timestamp`, `ingested_at`. The list is ordered by `digest_order` (arrival order), newest first by default; there is no sort by event `timestamp`. The UI keeps this order and shows the event `timestamp` in a column; it does not re-sort, because the API pages in arrival order.
 * **Lookup by SDK event id** (`events/lookup/?project=&event_id=`), for links that carry the Sentry event id.
-* **Search by trace:** Bugsink indexes `contexts.trace.trace_id` as the tag `trace`. `GET /issues/?q=trace:<id>` finds the issues holding events of one trace, with or without `project`; `GET /events/?issue=<id>&q=trace:<id>` finds the events within one issue. Events cannot be searched by trace across issues (`issue` is required). The reverse link, from a Tempo trace to its Bugsink events, therefore goes trace, issue, events.
+* **Search by trace:** Bugsink indexes `contexts.trace.trace_id` as the tag `trace`. `GET /issues/?q=trace:<id>` finds the issues holding events of one trace, with or without `project`; `GET /events/?issue=<id>&q=trace:<id>` finds the events within one issue. Events cannot be searched by trace across issues (`issue` is required). The reverse link, from a Tempo trace to its Bugsink events, therefore goes trace, issue, events. The events query type does this itself: given `trace:<id>` and no issue, it finds the issues and then their events, and returns one frame.
 * **Event detail:** the full Sentry event payload (`data`). The plugin reads the exception, stack frames, breadcrumbs, tags, contexts (`trace_id`), environment and release from it. The Sentry event format is a stable public protocol.
 * **Stack trace display:** rendered from the structured frames in `data`. Bugsink's `stacktrace_md` is displayed as Markdown only as a fallback and is never parsed.
 
@@ -99,7 +100,7 @@
   * Exception message and formatted stack trace (in-app frames emphasized, others collapsible).
   * Breadcrumb timeline.
   * Tags and contexts (`environment`, `release`, `trace_id`, user-defined tags).
-  * **Open trace** and **Open logs** buttons (§5), hidden when the event has no `trace_id` or the target data source is not configured.
+  * **Open trace** and **Open logs** buttons (§5), hidden when the event has no `trace_id` or the target data source is not configured. The plugin does not check that the trace exists in Tempo.
   * An event captured with no active span still carries a `trace_id` (the SDK's own), which Tempo does not have (§5), so for events from the Python SDK this rule rarely applies (the JavaScript SDK was not tested) and a link can lead to a missing trace.
 
 ### E. Triage
@@ -117,7 +118,7 @@ Bugsink has one endpoint per action under `/api/canonical/0/issues/{id}/`:
 | Unmute | `unmute/` | none |
 
 * **Who may triage:** the backend checks the calling Grafana user before forwarding a triage call. The default is org role Editor or higher; Grafana RBAC plugin actions are used where available. Triage can be switched off per data source.
-* **Attribution:** all calls run as the token's Bugsink user. When the token has `issues:comment`, the plugin adds an issue comment (`POST /issue-comments/`, body `issue` and `comment`) naming the Grafana user and the action (configurable).
+* **Attribution:** all calls run as the token's Bugsink user. When the token has `issues:comment`, the plugin adds an issue comment (`POST /issue-comments/`, body `issue` and `comment`) naming the Grafana user and the action. This is on by default and can be switched off per data source.
 * **Inline actions** on the issue list: Resolve and Mute. The other actions are in the issue detail page.
 * The issue's state shown after an action comes from the issue object Bugsink returns.
 
@@ -135,7 +136,7 @@ Links only work when the `trace_id` in the Bugsink event matches the trace store
 Verified setup (Python, FastAPI, Sentry SDK 2.75, OpenTelemetry SDK 1.45):
 * Sentry's `OTLPIntegration(setup_otlp_traces_exporter=False)` makes the event's `contexts.trace.trace_id` the OpenTelemetry trace id; the app exports its spans to Tempo itself.
 * In a FastAPI/Starlette app with Sentry's default ASGI integration, the OpenTelemetry ASGI middleware must be the outermost wrapper (`OpenTelemetryMiddleware(app)`). With the FastAPI instrumentor, Sentry captured unhandled errors after the request span had ended and the event carried a trace id Tempo does not have (observed by hand, see phase0_findings.md, Q1; not reproduced by a script).
-* An event raised with no active span still carries a trace id and span id from the SDK's propagation context, and Bugsink tags it `trace`; Tempo has no such trace.
+* An event raised with no active span still carries a trace id and span id from the SDK's propagation context, and Bugsink tags it `trace`; Tempo has no such trace. The plugin cannot tell such an id from a real one without asking Tempo, so the link is offered and Tempo reports the trace as not found; the documentation explains the case.
 * The integration replaces the global propagator, and an incoming W3C `traceparent` header was ignored in the sample app (observed by hand, see phase0_findings.md, Other findings; not reproduced by a script); `setup_propagator=False` was not tested.
 
 ### Link construction
@@ -160,13 +161,14 @@ Bugsink (2.6.2 and later; verified on 2.6.3) keeps hourly event counters per ins
 * **Series offered by the data source:**
   * Event volume per project, and per issue, from `event-counts` (hourly; the plugin re-buckets to coarser intervals, never finer).
   * New issues per interval, from `first_seen` in the issue list.
-  * Current values for alert rules: open-issue count, issues seen in the last N minutes, event count of the current hour. The issue list has no count field (250 per page), so a count needs a page-through today (§10).
+  * Current values for alert rules: open-issue count, issues seen in the last N minutes, event count of the current hour. The issue list has no count field (250 per page), so the data source pages through the list (capped at a fixed number of pages) and caches the count for a short time.
 * **Alerting:** the data source declares `alerting: true` and serves these series to Grafana alert rules. Volume alerts work at hourly resolution: a rule can compare the current, incomplete hour against a threshold or the previous hours, but cannot react to a five-minute spike.
 * **Beyond 90 days:** hourly counts are kept for a fixed 90 days, independent of event retention. Older history is the issue's lifetime totals (`digested_event_count`, `first_seen`, `last_seen`) plus the events retention has kept, which are a sample. The plugin does not build count series from stored events.
 * **Left with Bugsink:** new-issue, regression and unmute notifications, which Bugsink sends itself.
 * **Limits to raise with Bugsink upstream** (only if they hurt in practice):
   * Counts for many issues in one request: a dashboard of N issues costs N calls today.
   * Resolution finer than one hour.
+  * A count on the issue list, which would replace the page-through.
 
 ## 7. Development & Test Environment
 * **Docker Compose** stack: Bugsink, Grafana (plugin mounted), Tempo, Loki, and an OpenTelemetry Collector.
@@ -196,13 +198,20 @@ GNU General Public License, version 3 or later (`GPL-3.0-or-later`). A personal 
 
 ---
 
-## 10. Open Questions
-* Whether issue comments as triage attribution should be on by default.
-* What the UI does when an event's trace is not in Tempo (events without a span carry a trace id Tempo lacks; §4.D, §5).
-* Whether the documented Python setup keeps the OTLP integration's propagator or sets `setup_propagator=False`, so that an incoming `traceparent` is honoured (§5; untested).
-* How the health check learns a token's capabilities, given that no endpoint reports them (`GET /api/0/` needs `debug-files:upload`, which the recommended token lacks, and returned a fixed `auth.scopes` in the hand-run): whether it may rely on `/api/0/`, or makes one call per capability, or only for the features configured (§4.A).
-* How the event list is ordered in the UI, given that Bugsink orders by arrival (`digest_order`) and offers no sort by event `timestamp` (§4.C).
-* How the open-issue count for alert rules is obtained, given that it needs a page-through of the issue list: page and cache, or ask Bugsink for a count (§6).
-* Whether the config editor for a project-bound token discovers the project from `GET /projects/` or also accepts a project id (§4.A).
-* Whether the events query type fans out across issues for `trace:<id>` (find the issues, then their events), given that `GET /events/` needs an `issue` (§4.C).
-* Whether code that `oapi-codegen` generates from the Bugsink schema, which is licensed under PolyForm Shield 1.0.0, may be compiled into a plugin licensed `GPL-3.0-or-later`, and on what terms (§9; `bugsink-api/NOTICE.md`).
+## 10. Decisions and Open Questions
+
+Decided on 2026-11-15:
+
+| Question | Decision | Section |
+| :--- | :--- | :--- |
+| How the health check learns a token's capabilities | One read per capability the configured features need; write capabilities are not probed | §4.A |
+| Config editor for a project-bound token | Discovers the project from `GET /projects/`; no project id field | §4.A |
+| Event list order in the UI | Bugsink's arrival order, newest first; no re-sorting | §4.C |
+| Events query for `trace:<id>` | Fans out in the data source: the issues, then their events | §4.C |
+| An event whose trace is not in Tempo | The buttons show whenever a trace id exists; Tempo reports the missing trace | §4.D, §5 |
+| Attribution comments | On by default when the token has `issues:comment` | §4.E |
+| Open-issue count for alert rules | Page through the issue list and cache; ask Bugsink upstream for a count | §6 |
+
+Still open:
+* Whether code that `oapi-codegen` generates from the Bugsink schema, which is licensed under PolyForm Shield 1.0.0, may be compiled into a plugin licensed `GPL-3.0-or-later` (§9; `bugsink-api/NOTICE.md`). The Bugsink maintainer is asked for written permission before M1 merges generated code; without it, M1 uses a hand-written client for the operations the plugin calls.
+* Whether the documented Python setup keeps the OTLP integration's propagator or sets `setup_propagator=False`. M6 tests both and documents the one that honours an incoming `traceparent` (§5).

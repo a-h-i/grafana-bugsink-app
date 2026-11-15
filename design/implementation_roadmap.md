@@ -69,14 +69,16 @@ The walking skeleton: every layer exists and is wired, with the smallest feature
 * **Scope:** `create-plugin` scaffold of the app with the nested backend data source; Go client
   generated with `oapi-codegen` v2.8.2 from the unmodified schema (`ogen` fails on it, findings Q11);
   config editor (base URL, API token in `secureJsonData`; for a project-bound token `GET /projects/`
-  returns its project, so the editor can discover it, findings Q5; see Open decisions); `CheckHealth`
-  for URL, token and token kind, and for the capabilities the token lacks (no endpoint reports them; `GET /api/0/` needs `debug-files:upload`,
-  findings Q4; how it learns them is an open decision); Compose stack mounts and provisions the plugin; CI
+  returns its project, which the editor discovers; there is no project id field, findings Q5); `CheckHealth`
+  for URL, token and token kind, and for the capabilities the token lacks (no endpoint reports them, findings Q4:
+  one read per capability the configured features need; write capabilities are reported as not verified); Compose stack mounts and provisions the plugin; CI
   (lint, unit tests, build, end-to-end); license headers and `README.md`.
 * **Demo:** add the data source with a valid token and see success; with a wrong URL, a bad token and a
   token without capabilities, see a message that names the problem; with a project-bound token, see
   success.
 * **Plugin ids:** `ahmedismail-bugsink-app` and `ahmedismail-bugsink-datasource`.
+* **Needs first:** the Bugsink maintainer's written permission to ship code generated from the schema;
+  without it, a hand-written client for the operations the plugin calls replaces the generated one (see Open decisions).
 
 ### M2: Issues in dashboards
 
@@ -102,13 +104,13 @@ The walking skeleton: every layer exists and is wired, with the smallest feature
 * **Scope:** issue detail page (summary, tag values with counts (`events:read`), history from
   `GET /issue-history/`); events query type in the data source (list for one issue with `q`, lookup by
   SDK event id) returning a table frame; search by trace through the issue list
-  (`GET /issues/?q=trace:<id>`, then the events of that issue), since `/events/` needs an issue; event
-  list on the issue page (order: spec §10); `CallResource` routes for the
+  (`GET /issues/?q=trace:<id>`, then the events of those issues), since `/events/` needs an issue: the
+  events query does both steps itself; event list on the issue page in Bugsink's arrival order, newest
+  first; `CallResource` routes for the
   detail reads.
 * **Demo:** click an issue in the list, see its summary, tags and history, and a list of its events; an
-  issues table panel on a dashboard filtered by `trace:<id>`, and the events of that issue filtered by
-  the same trace.
-* **Needs first:** how the event list is ordered in the UI, and whether the events query fans out across issues for `trace:<id>` (spec §10).
+  issues table panel on a dashboard filtered by `trace:<id>`, and an events table panel that shows the
+  events of the same trace from one query.
 * **Not yet:** event content. An event row shows ids and timestamps only.
 
 ### M5: Event detail
@@ -125,16 +127,16 @@ The walking skeleton: every layer exists and is wired, with the smallest feature
 
 * **Scope:** config editor fields for the Tempo and Loki data sources, time window, LogQL template and
   `${service}` source; internal data links on event frames; **Open trace** and **Open logs** buttons on
-  the event detail, hidden when there is no `trace_id` or no target; the JavaScript sample app, as the
+  the event detail, hidden when there is no `trace_id` or no target, and shown without checking Tempo;
+  a test of `setup_propagator=False` in the Python sample app; the JavaScript sample app, as the
   second SDK to verify against; documentation of the SDK trace-context prerequisite and of the reverse
   link from a Tempo trace to its Bugsink events (trace, issue, events; findings Q7); the documentation
   also covers the ASGI middleware order, events whose trace Tempo does not have, and `traceparent`
   propagation (findings Q1 and other findings).
 * **Demo:** trigger an error in each sample app, open the event, land on the right trace in Tempo and on
   the matching log lines in Loki; an event without a `trace_id` shows no buttons; the sample app's
-  `/no-trace` event (a trace id Tempo does not have) behaves as decided.
-* **Needs first:** what the UI does when the event's trace is not in Tempo, and whether the documented
-  setup keeps the OTLP integration's propagator (spec §10).
+  `/no-trace` event (a trace id Tempo does not have) shows the buttons and Tempo reports the trace as
+  not found; a request with a `traceparent` header keeps its trace id with the documented setup.
 
 ### M7: Basic triage
 
@@ -148,11 +150,10 @@ The walking skeleton: every layer exists and is wired, with the smallest feature
 ### M8: Full triage
 
 * **Scope:** resolve in latest and next release; mute for a period and until a volume threshold, with
-  their forms; attribution comment when the token has `issues:comment` (configurable); Grafana RBAC
+  their forms; attribution comment when the token has `issues:comment` (on by default, can be switched off); Grafana RBAC
   plugin actions where available.
 * **Demo:** mute an issue for two days, resolve another in the next release, and see a comment in Bugsink
   naming the Grafana user for each.
-* **Needs first:** whether attribution comments are on by default (see Open decisions).
 
 ### M9: Event volume series
 
@@ -166,12 +167,12 @@ The walking skeleton: every layer exists and is wired, with the smallest feature
 
 * **Scope:** `alerting: true`; new issues per interval from `first_seen`; current-value queries
   (open-issue count, issues seen in the last N minutes, event count of the current hour); documentation
-  of the hourly-resolution limit. The open-issue count needs a page-through of the issue list (250 per
-  page, no count field).
+  of the hourly-resolution limit. The open-issue count pages through the issue list (250 per page, no
+  count field), capped at a fixed number of pages and cached for a short time; a count field is
+  requested from Bugsink upstream.
 * **Demo:** an alert rule that fires when a project's event count in the current hour passes a
   threshold, and one that fires when open issues exceed a number; both fire after the sample app
   produces errors.
-* **Needs first:** how the open-issue count is obtained (spec §10).
 
 ### M11: Release
 
@@ -206,14 +207,9 @@ M7 to M10 following as minor versions.
 
 ## Open decisions
 
+Seven of the nine decisions were made on 2026-11-15 and are in the milestones above; spec §10 lists them.
+
 | Decision | Needed by | Notes |
 | :--- | :--- | :--- |
-| Attribution comments on by default | M8 | Spec §10. |
-| What the UI does when an event's trace is not in Tempo | M6 | Spec §10; findings, "Other findings". |
-| `traceparent` propagation with the OTLP integration | M6 | Spec §10; `setup_propagator=False` untested. |
-| How the health check learns capabilities | M1 | Spec §10; findings Q4. |
-| Event list order in the UI | M4 | Spec §10; findings Q8. |
-| Events query for `trace:<id>`: fan out across issues or not | M4 | Spec §10; findings Q7. |
-| Config editor for project-bound tokens: discover the project or also accept an id | M1 | Spec §10; findings Q5. |
-| How the open-issue count is obtained | M10 | Spec §10; findings Q10. |
-| Licence status of Go client code generated from the PolyForm Shield schema when compiled into the GPL plugin | M1 | Spec §10; findings Q11. |
+| Licence status of Go client code generated from the PolyForm Shield schema when compiled into the GPL plugin | M1 | Ask the Bugsink maintainer for written permission; the fallback is a hand-written client. Spec §10; findings Q11. |
+| `traceparent` propagation with the OTLP integration | M6 | Settled by a test of `setup_propagator=False` in M6. Spec §10. |
