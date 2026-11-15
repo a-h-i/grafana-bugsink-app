@@ -13,6 +13,10 @@ export function ConfigEditor({ options, onOptionsChange }: Props) {
     onOptionsChange({ ...options, url: event.target.value });
   };
 
+  const onBrowserUrlChange = (event: ChangeEvent<HTMLInputElement>) => {
+    onOptionsChange({ ...options, jsonData: { ...options.jsonData, browserUrl: event.target.value } });
+  };
+
   const onTokenChange = (event: ChangeEvent<HTMLInputElement>) => {
     onOptionsChange({ ...options, secureJsonData: { ...secureJsonData, apiToken: event.target.value } });
   };
@@ -35,6 +39,20 @@ export function ConfigEditor({ options, onOptionsChange }: Props) {
           placeholder="https://bugsink.example.com"
           value={options.url ?? ''}
           onChange={onUrlChange}
+        />
+      </Field>
+      <Field
+        label="Browser URL"
+        description="The address of Bugsink as your browser reaches it, used for links to issues. Leave empty when it is the same as the Bugsink URL."
+        htmlFor="bugsink-browser-url"
+      >
+        <Input
+          id="bugsink-browser-url"
+          aria-label="Browser URL"
+          width={50}
+          placeholder="https://bugsink.example.com"
+          value={options.jsonData?.browserUrl ?? ''}
+          onChange={onBrowserUrlChange}
         />
       </Field>
       <Field

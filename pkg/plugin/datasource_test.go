@@ -43,21 +43,38 @@ func bugsinkHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func runCheck(t *testing.T, url, token string, timeout time.Duration) *backend.CheckHealthResult {
+func newInstance(t *testing.T, url, token, jsonData string) *Datasource {
 	t.Helper()
-	ds := &Datasource{healthTimeout: timeout}
-	res, err := ds.CheckHealth(context.Background(), &backend.CheckHealthRequest{
-		PluginContext: backend.PluginContext{
-			DataSourceInstanceSettings: &backend.DataSourceInstanceSettings{
-				URL:                     url,
-				DecryptedSecureJSONData: map[string]string{"apiToken": token},
-			},
-		},
-	})
+	settings := backend.DataSourceInstanceSettings{
+		URL:                     url,
+		DecryptedSecureJSONData: map[string]string{"apiToken": token},
+	}
+	if jsonData != "" {
+		settings.JSONData = []byte(jsonData)
+	}
+	inst, err := NewDatasource(context.Background(), settings)
+	if err != nil {
+		t.Fatalf("NewDatasource returned error: %v", err)
+	}
+	ds := inst.(*Datasource)
+	t.Cleanup(ds.Dispose)
+	return ds
+}
+
+func check(t *testing.T, ds *Datasource) *backend.CheckHealthResult {
+	t.Helper()
+	res, err := ds.CheckHealth(context.Background(), &backend.CheckHealthRequest{})
 	if err != nil {
 		t.Fatalf("CheckHealth returned error: %v", err)
 	}
 	return res
+}
+
+func runCheck(t *testing.T, url, token string, timeout time.Duration) *backend.CheckHealthResult {
+	t.Helper()
+	ds := newInstance(t, url, token, "")
+	ds.healthTimeout = timeout
+	return check(t, ds)
 }
 
 func closedPortURL(t *testing.T) string {
@@ -165,5 +182,75 @@ func TestCheckHealthNeverLeaksToken(t *testing.T) {
 	defer ok.Close()
 	for _, url := range []string{echo.URL, ok.URL, closedPortURL(t), "ftp://x", ""} {
 		assertNoToken(t, runCheck(t, url, secretToken, defaultHealthTimeout))
+	}
+}
+
+func TestBrowserURL(t *testing.T) {
+	tests := []struct{ name, jsonData, want string }{
+		{"empty gives the base URL", "", "http://bugsink.example:8000"},
+		{"empty field gives the base URL", `{"browserUrl":""}`, "http://bugsink.example:8000"},
+		{"trailing slash trimmed", `{"browserUrl":"http://localhost:8800/"}`, "http://localhost:8800"},
+		{"https kept", `{"browserUrl":"https://bugsink.example/sub"}`, "https://bugsink.example/sub"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ds := newInstance(t, "http://bugsink.example:8000/", secretToken, tt.jsonData)
+			if ds.settingsErr != "" {
+				t.Fatalf("settingsErr = %q", ds.settingsErr)
+			}
+			if ds.browserURL != tt.want {
+				t.Fatalf("browserURL = %q, want %q", ds.browserURL, tt.want)
+			}
+		})
+	}
+}
+
+func TestInvalidBrowserURL(t *testing.T) {
+	for _, browserURL := range []string{"javascript:alert(1)", "localhost:8800", "http://u:p@localhost:8800", "http://localhost:8800/?x=1", "http://localhost:8800/#y"} {
+		t.Run(browserURL, func(t *testing.T) {
+			ds := newInstance(t, "http://bugsink.example", secretToken, fmt.Sprintf(`{"browserUrl":%q}`, browserURL))
+			res := check(t, ds)
+			if res.Status != backend.HealthStatusError || res.Message != "The browser URL must start with http:// or https://." {
+				t.Fatalf("got %v %q", res.Status, res.Message)
+			}
+			if ds.client != nil {
+				t.Fatal("client is set while the settings are invalid")
+			}
+		})
+	}
+}
+
+func TestMalformedJSONDataLeavesNoClient(t *testing.T) {
+	ds := newInstance(t, "http://bugsink.example", secretToken, `{"browserUrl":`)
+	if ds.settingsErr == "" || ds.client != nil {
+		t.Fatalf("settingsErr = %q, client set = %v", ds.settingsErr, ds.client != nil)
+	}
+}
+
+func TestSettingsErrorsTakePrecedenceOverBrowserURL(t *testing.T) {
+	ds := newInstance(t, "", secretToken, `{"browserUrl":"nope"}`)
+	if res := check(t, ds); res.Message != "Enter the Bugsink URL." {
+		t.Fatalf("got %q", res.Message)
+	}
+}
+
+func TestHealthChecksShareOneConnection(t *testing.T) {
+	var opened atomic.Int32
+	srv := httptest.NewUnstartedServer(http.HandlerFunc(bugsinkHandler))
+	srv.Config.ConnState = func(_ net.Conn, s http.ConnState) {
+		if s == http.StateNew {
+			opened.Add(1)
+		}
+	}
+	srv.Start()
+	defer srv.Close()
+	ds := newInstance(t, srv.URL, secretToken, "")
+	for range 2 {
+		if res := check(t, ds); res.Status != backend.HealthStatusOk {
+			t.Fatalf("got %v %q", res.Status, res.Message)
+		}
+	}
+	if n := opened.Load(); n != 1 {
+		t.Fatalf("opened %d connections, want 1", n)
 	}
 }

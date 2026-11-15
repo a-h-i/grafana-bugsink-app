@@ -229,3 +229,18 @@ func TestProbeAnswers(t *testing.T) {
 		t.Errorf("ListEventsWithoutIssue error = %v", err)
 	}
 }
+
+func TestAPIErrorFieldErrors(t *testing.T) {
+	cases := []struct{ body, detail string }{
+		{`{"sort":["Must be 'digest_order', 'last_seen', or 'digested_event_count'."]}`,
+			"sort: Must be 'digest_order', 'last_seen', or 'digested_event_count'."},
+		{`{"state":["bad state","second"],"order":["bad order"]}`, "order: bad order state: bad state"},
+		{`{"detail":"nope"}`, "nope"},
+	}
+	for _, tc := range cases {
+		e := newAPIError(400, []byte(tc.body))
+		if e.Status != 400 || e.Detail != tc.detail {
+			t.Errorf("body %s: got %+v, want detail %q", tc.body, e, tc.detail)
+		}
+	}
+}

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 )
 
@@ -30,7 +31,7 @@ const missingCapabilityPrefix = "This token does not have the required capabilit
 type APIError struct {
 	Status     int
 	Capability Capability // set when a 403 body names a missing capability
-	Detail     string     // Bugsink's "detail" text, empty when the body is not Bugsink JSON
+	Detail     string     // Bugsink's "detail" text or its field errors, empty when the body is not Bugsink JSON
 }
 
 func (e *APIError) Error() string {
@@ -42,17 +43,36 @@ func (e *APIError) Error() string {
 
 func newAPIError(status int, body []byte) *APIError {
 	e := &APIError{Status: status}
-	var parsed struct {
-		Detail string `json:"detail"`
-	}
+	var parsed map[string]json.RawMessage
 	if json.Unmarshal(body, &parsed) != nil {
 		return e
 	}
-	e.Detail = parsed.Detail
+	e.Detail = detailOf(parsed)
 	if status == 403 {
-		if name, ok := strings.CutPrefix(parsed.Detail, missingCapabilityPrefix); ok {
+		if name, ok := strings.CutPrefix(e.Detail, missingCapabilityPrefix); ok {
 			e.Capability = Capability(strings.TrimSuffix(name, "."))
 		}
 	}
 	return e
+}
+
+// detailOf returns the "detail" text, or "<key>: <first message>" per field error in key order.
+func detailOf(parsed map[string]json.RawMessage) string {
+	var detail string
+	if json.Unmarshal(parsed["detail"], &detail) == nil && detail != "" {
+		return detail
+	}
+	keys := make([]string, 0, len(parsed))
+	for k := range parsed {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	var parts []string
+	for _, k := range keys {
+		var msgs []string
+		if json.Unmarshal(parsed[k], &msgs) == nil && len(msgs) > 0 {
+			parts = append(parts, k+": "+msgs[0])
+		}
+	}
+	return strings.Join(parts, " ")
 }

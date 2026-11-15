@@ -13,10 +13,18 @@ import baseConfig from './.config/playwright.config';
  * See https://playwright.dev/docs/test-configuration.
  */
 export default defineConfig<PluginOptions>(baseConfig, {
-  use: { baseURL: process.env.GRAFANA_URL || 'http://localhost:3300' },
+  use: {
+    baseURL: process.env.GRAFANA_URL || 'http://localhost:3300',
+    provisioningRootDir: 'docker/grafana/provisioning',
+  },
   projects: [
     { name: 'auth', testMatch: [] },
-    { name: 'chromium', use: { ...devices['Desktop Chrome'], storageState: undefined } },
+    { name: 'report-event', testMatch: /.*\.setup\.ts/ },
+    {
+      name: 'chromium',
+      use: { ...devices['Desktop Chrome'], storageState: undefined },
+      dependencies: ['auth', 'report-event'],
+    },
   ],
   // See https://grafana.com/developers/plugin-tools/how-to-guides/extend-configurations#extend-the-playwright-config for further info.
 });

@@ -78,6 +78,28 @@ describe('ConfigEditor', () => {
     expect(next.secureJsonData.apiToken).toBe('');
   });
 
+  it('shows the browser URL from jsonData', () => {
+    renderEditor({ jsonData: { browserUrl: 'https://bugsink.example.com' } });
+
+    expect(screen.getByLabelText('Browser URL')).toHaveValue('https://bugsink.example.com');
+  });
+
+  it('typing a browser URL sets jsonData.browserUrl and keeps the other options', () => {
+    const onOptionsChange = renderEditor({ url: 'http://bugsink:8000', jsonData: {} });
+
+    fireEvent.change(screen.getByLabelText('Browser URL'), { target: { value: 'https://b.example.com' } });
+
+    const next = lastCall(onOptionsChange);
+    expect(next.jsonData).toEqual({ browserUrl: 'https://b.example.com' });
+    expect(next.url).toBe('http://bugsink:8000');
+  });
+
+  it('explains the browser URL', () => {
+    renderEditor();
+
+    expect(screen.getByText(/Leave empty when it is the same as the Bugsink URL/)).toBeInTheDocument();
+  });
+
   it('explains the token', () => {
     renderEditor();
 

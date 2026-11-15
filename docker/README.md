@@ -77,8 +77,21 @@ Use a token as `Authorization: Bearer <token>`, for example
 Anonymous access with role Admin; no login. The data sources `Tempo` (uid `tempo`), `Loki` (uid `loki`) and
 `Bugsink` (uid `bugsink`, type `ahmedismail-bugsink-datasource`) are provisioned from
 `docker/grafana/provisioning/datasources/datasources.yaml`. `Bugsink` points at the Compose Bugsink and uses the
-seeded `GLOBAL_READ` token, a public development-only value. The plugin app is enabled by
+seeded `GLOBAL_READ` token, a public development-only value, and `Browser URL` `http://localhost:8800`, so
+issue links open the Bugsink on the host. The plugin app is enabled by
 `docker/grafana/provisioning/plugins/apps.yaml`.
+
+### Dashboards
+
+`docker/grafana/provisioning/dashboards/` is provisioned (read-only in the UI):
+
+* `Bugsink issues` (uid `bugsink-issues`, last 24 hours): a table `Unresolved issues in sample-python` with the
+  unresolved issues of `sample-python` seen in `development`, newest first. Each issue is a link that opens it in
+  Bugsink. The table needs a recent event; create one with `curl http://localhost:8810/handled`.
+* `Bugsink e2e: refused query` (uid `bugsink-e2e-refused`): a panel for a project that does not exist, used by the
+  end-to-end tests to check that a refused query shows Bugsink's message.
+
+After changing a provisioning file, run `docker compose restart grafana`.
 
 ## Sample app
 

@@ -17,6 +17,8 @@ datasources:
     uid: bugsink
     access: proxy
     url: http://bugsink:8000
+    jsonData:
+      browserUrl: http://localhost:8800
     secureJsonData:
       # Public development-only token from docker/bugsink/seed.py.
       apiToken: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa

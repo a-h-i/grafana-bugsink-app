@@ -2,7 +2,7 @@
 
 Connects Grafana to a self-hosted [Bugsink](https://www.bugsink.com/) error tracker.
 
-This version only connects: it adds a Bugsink data source that checks the Bugsink address and the API token you give it, and tells you what is wrong when the check fails. Browsing issues and events comes in later versions.
+It adds a Bugsink data source. The data source checks the Bugsink address and the API token you give it, and tells you what is wrong when the check fails. It also queries issues for dashboards and Explore. Events are not available yet.
 
 ## Requirements
 
@@ -19,12 +19,55 @@ Create the token in Bugsink. A token has capabilities, and it can be bound to on
 1. Enable the app if it is not enabled yet: in Grafana, open Administration > Plugins and data > Plugins, choose Bugsink and enable it.
 2. Open the Bugsink app. It lists your Bugsink data sources. With none, it shows `No Bugsink data source yet.` and the link `Add a Bugsink data source`.
 3. Follow that link, or open Connections > Data sources > Add new data source, and choose **Bugsink**.
-4. Fill in the two fields:
+4. Fill in the fields:
    - **Bugsink URL**: the address of Bugsink itself, for example `https://bugsink.example.com`. Do not add `/api`.
+   - **Browser URL** (optional): the address of Bugsink as your browser reaches it. The plugin uses it for the links to issues. Leave it empty when it is the same as the Bugsink URL. It differs when Grafana and your browser reach Bugsink by different addresses. In the development stack, Grafana reaches Bugsink at `http://bugsink:8000` and the browser at `http://localhost:8800`, so the Bugsink URL is `http://bugsink:8000` and the Browser URL is `http://localhost:8800`.
    - **API token**: the token you created. Grafana stores it encrypted and does not show it again.
 5. Click `Save & test`. A data source provisioned from a file has a `Test` button instead.
 
 The test makes at least one read request per capability and reports the result. It stops at the first answer that ends the check: a connection error or timeout, a rejected token, an answer that is not Bugsink's, or an unexpected answer to a capability check.
+
+## Querying issues
+
+Add a panel, or open Explore, choose the Bugsink data source and set the query. Every change to a control runs the query again; Search runs when you leave the field or press Enter. The result is a table with one row per issue.
+
+### Query controls
+
+| Control | What it does | Default |
+| :--- | :--- | :--- |
+| Project | Reads the issues of one project. `All projects` reads every project the token sees. | All projects |
+| State | Keeps only issues in that state: `All`, `Open`, `Unresolved`, `Resolved` or `Muted`. | Unresolved |
+| Sort by | `Last seen`, `Event count` or `Arrival order`. `Arrival order` needs a project: it is not offered with `All projects`. | Last seen |
+| Order | `Descending` or `Ascending`. | Descending |
+| Search | Bugsink's search text, for example `environment:production release:1.4.2`. It is sent when you leave the field or press Enter. It accepts dashboard variables, for example `environment:$environment`. The other controls do not. | empty |
+
+### Columns
+
+| Column | Content |
+| :--- | :--- |
+| Issue | The issue's short id. It links to the issue in Bugsink (see below). |
+| id | The issue's Bugsink id. The link uses it. Hide it with a field override or the Organize fields transformation if you do not want it. |
+| Type | The error type. |
+| Message | The error message. |
+| Transaction | The transaction the error happened in. |
+| Project | The project name. The project id shows instead when the project list cannot be read or does not contain the project. |
+| Status | `resolved`, `muted` or `open`. |
+| Events | The number of events Bugsink counted for the issue. |
+| Stored events | The number of events Bugsink still stores for the issue. |
+| First seen, Last seen | When the first and the last event arrived. |
+| Resolved, Resolved by next release, Muted | Flags of the issue. |
+| Unmute after | When a muted issue is unmuted, if it is set. |
+| Project ID | The project id. |
+
+### Link to Bugsink
+
+The Issue column carries the link `Open in Bugsink`. It opens the issue's last event in a new tab, on the address in the data source's `Browser URL`, or on the `Bugsink URL` when that is empty.
+
+### Limits
+
+- A row is an issue whose last event arrived within the dashboard time range, between its start and its end.
+- A query reads at most 5000 issues. When it stops there, the table carries the warning `Only the first 5000 issues were read. Narrow the search or the time range.`
+- Results can be up to 15 seconds old. Bugsink is asked again after that.
 
 ## Test results
 
@@ -39,8 +82,9 @@ A failed test says one of the following. `<url>` is the URL as you typed it.
 | :--------------------------------------------------------------------------------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `Enter the Bugsink URL.`                                                                                                     | Fill in the Bugsink URL field.                                                                                                                                                                                                                                |
 | `The Bugsink URL must start with http:// or https://.`                                                                       | Add the scheme to the URL.                                                                                                                                                                                                                                    |
+| `The browser URL must start with http:// or https://.`                                                                       | Fix the Browser URL. It must be an http or https address without credentials, a query string or a fragment, or empty.                                                                                                                                       |
 | `Enter an API token.`                                                                                                        | Fill in the API token field.                                                                                                                                                                                                                                  |
-| `The data source settings are invalid.`                                                                                      | Grafana could not build an HTTP client from the data source's settings. The editor has only the URL and the token, so this can only come from settings supplied through provisioning or the API, for example a TLS certificate setting. Correct that setting. |
+| `The data source settings are invalid.`                                                                                      | Grafana could not build an HTTP client from the data source's settings. The editor has only the URL, the browser URL and the token, so this can only come from settings supplied through provisioning or the API, for example a TLS certificate setting. Correct that setting. |
 | `Cannot reach Bugsink at <url>: <cause>.`                                                                                    | Grafana's server could not connect. The cause says why: a refused connection, a DNS failure or a TLS error. Check the address, the network path from the Grafana server to Bugsink and the certificate.                                                       |
 | `Bugsink at <url> did not answer within 10 seconds.`                                                                         | Check that Bugsink is running and not overloaded, and that nothing between Grafana and Bugsink drops the traffic.                                                                                                                                             |
 | `Bugsink rejected the API token. Check that it was copied in full and has not been deleted.`                                 | Paste the token again, or create a new one in Bugsink.                                                                                                                                                                                                        |

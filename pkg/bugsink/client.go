@@ -28,6 +28,7 @@ type Project struct {
 type Client struct {
 	gen        *gen.Client
 	authHeader string
+	baseURL    string
 }
 
 // New builds a client for the Bugsink at baseURL using httpClient for transport.
@@ -46,7 +47,7 @@ func New(baseURL, token string, httpClient *http.Client) (*Client, error) {
 	u.RawQuery, u.Fragment = "", ""
 	u.Path = strings.TrimSuffix(strings.TrimSuffix(u.Path, "/"), apiPath)
 
-	c := &Client{authHeader: "Bearer " + token}
+	c := &Client{authHeader: "Bearer " + token, baseURL: u.String()}
 	c.gen, err = gen.NewClient(u.String(),
 		gen.WithHTTPClient(httpClient),
 		gen.WithRequestEditorFn(func(_ context.Context, req *http.Request) error {
@@ -59,36 +60,62 @@ func New(baseURL, token string, httpClient *http.Client) (*Client, error) {
 	return c, nil
 }
 
-// ListProjects returns every project the token can see, following next until it is null.
+// ListProjects returns the projects the token can see, following next until it is null or MaxPages is reached.
 func (c *Client) ListProjects(ctx context.Context) ([]Project, error) {
 	var projects []Project
+	_, err := listPages(ctx, func(cursor *string) (*http.Response, error) {
+		return c.gen.ProjectsList(ctx, &gen.ProjectsListParams{Cursor: cursor})
+	}, func(results []gen.ProjectList) bool {
+		for _, p := range results {
+			projects = append(projects, Project{ID: deref(p.Id), Name: p.Name})
+		}
+		return false
+	})
+	if err != nil {
+		return nil, err
+	}
+	return projects, nil
+}
+
+// BaseURL is the Bugsink address without the API path or a trailing slash.
+func (c *Client) BaseURL() string { return c.baseURL }
+
+// listPages requests pages with the cursor taken from next until next is null, onPage returns true or MaxPages is reached.
+func listPages[T any](ctx context.Context, fetch func(cursor *string) (*http.Response, error),
+	onPage func(results []T) (stop bool)) (truncated bool, err error) {
 	var cursor *string
-	for {
-		resp, err := c.gen.ProjectsList(ctx, &gen.ProjectsListParams{Cursor: cursor})
+	for pages := 1; ; pages++ {
+		resp, err := fetch(cursor)
 		if err != nil {
-			return nil, err
+			return false, err
 		}
-		var page gen.PaginatedProjectListList
-		if err := decodeJSON(resp, &page); err != nil {
-			return nil, err
+		var body struct {
+			Next    *string `json:"next"`
+			Results []T     `json:"results"`
 		}
-		if page.Results == nil {
-			return nil, fmt.Errorf("%w: %w", ErrNotBugsink, &APIError{Status: resp.StatusCode})
+		if err := decodeJSON(resp, &body); err != nil {
+			return false, err
 		}
-		for _, p := range page.Results {
-			projects = append(projects, Project{ID: derefInt(p.Id), Name: p.Name})
+		if body.Results == nil {
+			return false, fmt.Errorf("%w: %w", ErrNotBugsink, &APIError{Status: resp.StatusCode})
 		}
-		if page.Next == nil || *page.Next == "" {
-			return projects, nil
+		if onPage(body.Results) || body.Next == nil || *body.Next == "" {
+			return false, nil
 		}
-		nextCursor, err := cursorOf(*page.Next)
+		next, err := cursorOf(*body.Next)
 		if err != nil {
-			return nil, err
+			return false, err
 		}
-		if cursor != nil && *cursor == nextCursor {
-			return nil, fmt.Errorf("%w: next page repeats the cursor", ErrNotBugsink)
+		if cursor != nil && *cursor == next {
+			return false, fmt.Errorf("%w: next page repeats the cursor", ErrNotBugsink)
 		}
-		cursor = &nextCursor
+		if pages >= MaxPages {
+			return true, nil
+		}
+		if err := ctx.Err(); err != nil {
+			return false, err
+		}
+		cursor = &next
 	}
 }
 
@@ -142,11 +169,4 @@ func decodeJSON(resp *http.Response, out any) error {
 func readAPIError(resp *http.Response) error {
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, maxBodyBytes))
 	return newAPIError(resp.StatusCode, body)
-}
-
-func derefInt(p *int) int {
-	if p == nil {
-		return 0
-	}
-	return *p
 }

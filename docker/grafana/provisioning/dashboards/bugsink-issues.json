@@ -1,0 +1,57 @@
+{
+  "uid": "bugsink-issues",
+  "title": "Bugsink issues",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "templating": {
+    "list": []
+  },
+  "annotations": {
+    "list": []
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "table",
+      "title": "Unresolved issues in sample-python",
+      "gridPos": {
+        "h": 12,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "datasource": {
+        "type": "ahmedismail-bugsink-datasource",
+        "uid": "bugsink"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "ahmedismail-bugsink-datasource",
+            "uid": "bugsink"
+          },
+          "queryType": "issues",
+          "project": 1,
+          "state": "unresolved",
+          "q": "environment:development",
+          "sort": "last_seen",
+          "order": "desc"
+        }
+      ],
+      "options": {
+        "showHeader": true
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      }
+    }
+  ]
+}

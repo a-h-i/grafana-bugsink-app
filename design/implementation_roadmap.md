@@ -80,14 +80,19 @@ The walking skeleton: every layer exists and is wired, with the smallest feature
 
 ### M2: Issues in dashboards
 
-* **Scope:** issues query type in `QueryData` (`project`, `state`, `q`, `sort`, `order`) returning a table
-  frame with the fields in §4.B; pagination by following `next` URLs (250 per page, no total count); dashboard time range by sorting on
-  `last_seen` and stopping at the range start (`sort=last_seen&order=desc` sent explicitly;
-  `sort=digest_order` only with a project); short-lived cache; query editor with project picker (or
-  the fixed project for project-bound tokens), state picker and search field; link from each row to the
-  issue in Bugsink's UI.
-* **Demo:** a table panel showing unresolved issues of one project seen in the last 24 hours, filtered
-  with `environment:production`; the same query in Explore.
+Built; see [`plans/m2-issues-in-dashboards.md`](plans/m2-issues-in-dashboards.md).
+
+* **Scope:** issues query in `QueryData` (`project`, `state`, `q`, `sort`, `order`) returning a table
+  frame with the fields in §4.B plus the project name, a status and the issue id; pagination with the
+  cursor from `next` (250 per page, no total count, at most 20 pages); dashboard time range as "last
+  seen within the range", stopping at the range start when sorted by `last_seen` descending (`sort` and
+  `order` always sent; `sort=digest_order` only with a project); a 15-second cache per instance; a
+  project list resource; query editor with project picker (a project-bound token sees its one
+  project), state picker, search field, sort and order; link from each row to the issue in Bugsink's
+  UI, built from the optional Browser URL setting.
+* **Demo:** the provisioned dashboard `Bugsink issues`: a table panel showing unresolved issues of
+  `sample-python` seen in the last 24 hours, filtered with `environment:development` (the sample app's
+  environment); the same query in Explore.
 
 ### M3: Issue list page
 

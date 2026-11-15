@@ -3,7 +3,10 @@ package plugin
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -15,41 +18,99 @@ import (
 
 // Datasource is one Bugsink data source instance.
 type Datasource struct {
+	client        *bugsink.Client // nil when settingsErr is set
+	httpClient    *http.Client
+	settingsErr   string // the health check's message for invalid settings, or empty
+	url           string // the Bugsink URL as entered, for messages
+	browserURL    string // base of links to Bugsink's pages, no trailing slash
 	healthTimeout time.Duration
+	issueCache    *cache[bugsink.IssueList]
+	projectCache  *cache[[]bugsink.Project]
 }
 
-var _ backend.CheckHealthHandler = (*Datasource)(nil)
+var (
+	_ backend.CheckHealthHandler    = (*Datasource)(nil)
+	_ backend.QueryDataHandler      = (*Datasource)(nil)
+	_ backend.CallResourceHandler   = (*Datasource)(nil)
+	_ instancemgmt.InstanceDisposer = (*Datasource)(nil)
+)
 
-// NewDatasource creates the instance Grafana asks for.
-func NewDatasource(_ context.Context, _ backend.DataSourceInstanceSettings) (instancemgmt.Instance, error) {
-	return &Datasource{healthTimeout: defaultHealthTimeout}, nil
+const (
+	msgEnterURL         = "Enter the Bugsink URL."
+	msgBugsinkURLScheme = "The Bugsink URL must start with http:// or https://."
+	msgEnterToken       = "Enter an API token."
+	msgSettingsInvalid  = "The data source settings are invalid."
+	msgBrowserURLScheme = "The browser URL must start with http:// or https://."
+)
+
+// NewDatasource creates the instance Grafana asks for; invalid settings are reported by the health check.
+func NewDatasource(ctx context.Context, s backend.DataSourceInstanceSettings) (instancemgmt.Instance, error) {
+	d := &Datasource{
+		url:           s.URL,
+		healthTimeout: defaultHealthTimeout,
+		issueCache:    newCache[bugsink.IssueList](cacheTTL, cacheMaxEntries),
+		projectCache:  newCache[[]bugsink.Project](cacheTTL, cacheMaxEntries),
+	}
+	d.settingsErr = d.configure(ctx, s)
+	return d, nil
+}
+
+// configure builds the client and browser URL and returns the message for invalid settings, or empty.
+func (d *Datasource) configure(ctx context.Context, s backend.DataSourceInstanceSettings) string {
+	if strings.TrimSpace(s.URL) == "" {
+		return msgEnterURL
+	}
+	opts, err := s.HTTPClientOptions(ctx)
+	if err != nil {
+		return msgSettingsInvalid
+	}
+	d.httpClient, err = httpclient.New(opts)
+	if err != nil {
+		return msgSettingsInvalid
+	}
+	client, err := bugsink.New(s.URL, s.DecryptedSecureJSONData["apiToken"], d.httpClient)
+	switch {
+	case errors.Is(err, bugsink.ErrInvalidURL):
+		return msgBugsinkURLScheme
+	case errors.Is(err, bugsink.ErrNoToken):
+		return msgEnterToken
+	case err != nil:
+		return msgSettingsInvalid
+	}
+	var jsonData struct {
+		BrowserURL string `json:"browserUrl"`
+	}
+	if len(s.JSONData) > 0 && json.Unmarshal(s.JSONData, &jsonData) != nil {
+		return msgSettingsInvalid
+	}
+	browserURL := strings.TrimSpace(jsonData.BrowserURL)
+	if browserURL == "" {
+		browserURL = client.BaseURL()
+	} else {
+		u, err := url.Parse(browserURL)
+		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" ||
+			u.User != nil || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" || strings.Contains(browserURL, "#") {
+			return msgBrowserURLScheme
+		}
+	}
+	d.browserURL = strings.TrimRight(browserURL, "/")
+	d.client = client
+	return ""
+}
+
+// Dispose closes the HTTP client's idle connections.
+func (d *Datasource) Dispose() {
+	if d.httpClient != nil {
+		d.httpClient.CloseIdleConnections()
+	}
 }
 
 // CheckHealth probes the configured Bugsink and reports what the token can do; it never returns an error.
-func (d *Datasource) CheckHealth(ctx context.Context, req *backend.CheckHealthRequest) (*backend.CheckHealthResult, error) {
-	settings := req.PluginContext.DataSourceInstanceSettings
-	if settings == nil || strings.TrimSpace(settings.URL) == "" {
-		return errorResult("Enter the Bugsink URL."), nil
-	}
-	opts, err := settings.HTTPClientOptions(ctx)
-	if err != nil {
-		return errorResult("The data source settings are invalid."), nil
-	}
-	httpClient, err := httpclient.New(opts)
-	if err != nil {
-		return errorResult("The data source settings are invalid."), nil
-	}
-	defer httpClient.CloseIdleConnections()
-	client, err := bugsink.New(settings.URL, settings.DecryptedSecureJSONData["apiToken"], httpClient)
-	switch {
-	case errors.Is(err, bugsink.ErrInvalidURL):
-		return errorResult("The Bugsink URL must start with http:// or https://."), nil
-	case errors.Is(err, bugsink.ErrNoToken):
-		return errorResult("Enter an API token."), nil
-	case err != nil:
-		return errorResult("The data source settings are invalid."), nil
+func (d *Datasource) CheckHealth(ctx context.Context, _ *backend.CheckHealthRequest) (*backend.CheckHealthResult, error) {
+	if d.settingsErr != "" {
+		return errorResult("%s", d.settingsErr), nil
 	}
 	ctx, cancel := context.WithTimeout(ctx, d.healthTimeout)
 	defer cancel()
-	return checkHealth(ctx, settings.URL, d.healthTimeout, client), nil
+	return checkHealth(ctx, d.url, d.healthTimeout, d.client), nil
 }

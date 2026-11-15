@@ -67,6 +67,7 @@
 ### A. Authentication & Configuration
 * **Token:** a Bugsink API token in `secureJsonData`. Recommended: a global service token with `projects:read`, `issues:read`, `events:read`, plus `issues:triage` and `issues:comment` when triage is enabled.
 * **Project-bound tokens** are supported: `GET /projects/` returns only the token's own project. The config editor discovers the project from it and has no project id field.
+* **Browser URL** (optional, `jsonData.browserUrl`): the address of Bugsink as the browser reaches it, used for links to Bugsink's pages. Empty means the Bugsink URL. It must be `http` or `https` and carry no credentials, query string or fragment.
 * **Health check:** confirms the base URL, the token, and which configured features the token's capabilities allow (for example "triage enabled but token lacks `issues:triage`").
   * No endpoint reports a token's capabilities. `GET /api/0/` returns `auth.scopes`, but it needs `debug-files:upload` and returned `["org:ci"]` for the tokens tried, one with `debug-files:upload` and one with it plus `issues:read` (observed by hand, findings Q4). Each operation needs one (`x-bugsink-required-capability` in the schema), so a client learns a capability only by calling an operation that needs it and reading the refusal.
   * The health check makes one read per capability that the configured features need, and no others (with triage off, nothing is checked for triage). The write capabilities (`issues:triage`, `issues:comment`) cannot be checked without a side effect: the health check reports them as not verified, and the first action that is refused shows Bugsink's 403.
@@ -76,9 +77,11 @@
 `GET /issues/` supports, as of 2.6.3:
 * `project` (optional; omitted lists every project the token can see), `state` (`all`, `open`, `unresolved`, `resolved`, `muted`), `q` (plain-text title search plus `key:value` tag filters, e.g. `environment:production release:1.4.2`), `sort` (`digest_order`, `last_seen`, `digested_event_count`), `order`, `cursor`.
 * **Sort defaults:** `digest_order` needs a single project (400 without one for a global token). Without `sort`, a single-project list is `digest_order` ascending and a list across projects is `last_seen` descending, so the plugin sends `sort` and `order` explicitly.
-* **Paging:** 250 results per page; `{next, previous, results}` with no total count.
-* **Time range:** "issues seen in the dashboard range". The plugin sorts by `last_seen` descending and stops paging once `last_seen` falls before the range start.
-* **Filters** map directly onto `state` and `q`; the query editor offers a project picker, a state picker and a free search field.
+* **Paging:** 250 results per page; `{next, previous, results}` with no total count. A query reads at most 20 pages (5000 issues) and then says so in a warning on the frame.
+* **Time range:** issues last seen within the dashboard range (`from <= last_seen <= to`). Sorted by `last_seen` descending, the plugin stops paging once `last_seen` falls before the range start; with any other sort it reads every page (up to the limit) and filters. Issues last seen after the range end are skipped.
+* **Filters** map directly onto `state` and `q`; the query editor offers a project picker, a state picker and a free search field. Defaults: all projects, state `unresolved`, `last_seen` descending. Only `q` takes dashboard variables.
+* **Frame:** besides the fields below, a row carries the project's name, a `status` (`resolved`, `muted` or `open`) and the issue `id`; the `friendly_id` field links to the issue's page in Bugsink (`<browser URL>/issues/issue/<id>/event/last/`).
+* **Cache:** 15 seconds per data source instance; a list fetched for one range start answers later queries with the same filter and a later range start.
 * **Issue fields used:** `friendly_id`, `project`, `calculated_type`, `calculated_value`, `transaction`, `first_seen`, `last_seen`, `digested_event_count`, `stored_event_count`, `is_resolved`, `is_resolved_by_next_release`, `is_muted`, `unmute_after`.
 * **Issue extras:** tag values with counts (`issues/{id}/tags/`, needs `events:read`), issue history (state changes and comments with author names, `GET /issue-history/?issue=`), hourly event counts (`issues/{id}/event-counts/`).
 
@@ -211,6 +214,8 @@ Decided on 2026-11-15:
 | An event whose trace is not in Tempo | The buttons show whenever a trace id exists; Tempo reports the missing trace | §4.D, §5 |
 | Attribution comments | On by default when the token has `issues:comment` | §4.E |
 | Open-issue count for alert rules | Page through the issue list and cache; ask Bugsink upstream for a count | §6 |
+| What the dashboard time range means for the issues query | Issues last seen within the range, both ends | §4.B |
+| Links to Bugsink when Grafana reaches it by an internal address | An optional Browser URL setting | §4.A |
 | Code generated from the PolyForm Shield schema, compiled into the GPL plugin | Shipped without asking for permission; the owner accepted the risk on 2026-11-15. The generated client is confined to one package (`pkg/bugsink/internal/gen`), so a hand-written client can replace it if Bugsink B.V. objects | §9 |
 
 Still open:

@@ -1,0 +1,54 @@
+{
+  "uid": "bugsink-e2e-refused",
+  "title": "Bugsink e2e: refused query",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "templating": {
+    "list": []
+  },
+  "annotations": {
+    "list": []
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "table",
+      "title": "Project that does not exist",
+      "gridPos": {
+        "h": 12,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "datasource": {
+        "type": "ahmedismail-bugsink-datasource",
+        "uid": "bugsink"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "ahmedismail-bugsink-datasource",
+            "uid": "bugsink"
+          },
+          "queryType": "issues",
+          "project": 99,
+          "state": "all"
+        }
+      ],
+      "options": {
+        "showHeader": true
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      }
+    }
+  ]
+}

@@ -76,6 +76,13 @@ test.describe('connecting a Bugsink data source', () => {
     await expect(configPage).toHaveAlert('error', { hasText: 'Enter an API token.' });
   });
 
+  test('invalid browser URL', async ({ createDataSourceConfigPage, page }) => {
+    const configPage = await saveAndTest(createDataSourceConfigPage, page, BUGSINK_URL, GLOBAL_READ);
+    await page.getByRole('textbox', { name: 'Browser URL' }).fill('localhost:8800');
+    await expect(configPage.saveAndTest()).not.toBeOK();
+    await expect(configPage).toHaveAlert('error', { hasText: 'The browser URL must start with http:// or https://.' });
+  });
+
   test('provisioned data source', async ({ gotoDataSourceConfigPage, page }) => {
     await gotoDataSourceConfigPage('bugsink');
     await expect(page.getByRole('textbox', { name: 'API token' })).toHaveValue('configured');
