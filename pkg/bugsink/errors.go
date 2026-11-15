@@ -43,6 +43,11 @@ func (e *APIError) Error() string {
 
 func newAPIError(status int, body []byte) *APIError {
 	e := &APIError{Status: status}
+	var list []string
+	if json.Unmarshal(body, &list) == nil {
+		e.Detail = strings.Join(list, " ")
+		return e
+	}
 	var parsed map[string]json.RawMessage
 	if json.Unmarshal(body, &parsed) != nil {
 		return e

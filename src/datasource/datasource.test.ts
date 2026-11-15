@@ -38,13 +38,97 @@ describe('BugsinkDataSource', () => {
     expect(result).toEqual({ ...query, q: 'environment:production' });
   });
 
+  it('interpolates $env in q, issue and eventId', () => {
+    const query = { refId: 'A', queryType: 'events', q: 'trace:$env', issue: '$env', eventId: '$env' };
+
+    const result = createDataSource().applyTemplateVariables(query, { env: { text: 't', value: 'abc' } });
+
+    expect(result).toEqual({ ...query, q: 'trace:abc', issue: 'abc', eventId: 'abc' });
+  });
+
+  it.each([
+    ['getIssue', 'issues/SAMPLE-PYTHON-2'],
+    ['getIssueTags', 'issues/SAMPLE-PYTHON-2/tags'],
+    ['getIssueHistory', 'issues/SAMPLE-PYTHON-2/history'],
+  ] as const)('%s reads %s', async (method, path) => {
+    const ds = createDataSource();
+    const getResource = jest.spyOn(ds, 'getResource').mockResolvedValue({ ok: true });
+
+    await expect(ds[method]('SAMPLE-PYTHON-2')).resolves.toEqual({ ok: true });
+    expect(getResource).toHaveBeenCalledWith(path, undefined, { showErrorAlert: false });
+  });
+
+  it('encodes the issue id in the resource path', async () => {
+    const ds = createDataSource();
+    const getResource = jest.spyOn(ds, 'getResource').mockResolvedValue({});
+
+    await ds.getIssue('a/b');
+
+    expect(getResource).toHaveBeenCalledWith('issues/a%2Fb', undefined, { showErrorAlert: false });
+  });
+
+  describe('listEvents', () => {
+    function eventsFrame(notices: string[] = []) {
+      const col = (name: string, type: FieldType, value: string | number) => ({ name, type, values: [value] });
+      return createDataFrame({
+        fields: [
+          col('timestamp', FieldType.time, 1000),
+          col('event_id', FieldType.string, 'sdk-1'),
+          col('issue', FieldType.string, 'X-1'),
+          col('project', FieldType.string, 'p'),
+          col('ingested_at', FieldType.time, 1500),
+          col('id', FieldType.string, 'e1'),
+          col('issue_id', FieldType.string, 'i1'),
+          col('project_id', FieldType.number, 1),
+        ],
+        meta: { notices: notices.map((text) => ({ severity: 'warning' as const, text })) },
+      });
+    }
+
+    it('sends one events target', async () => {
+      const ds = createDataSource();
+      const query = jest.spyOn(ds, 'query').mockReturnValue(of({ data: [eventsFrame()] }));
+
+      await ds.listEvents({ refId: 'x', issue: 'X-1' });
+
+      expect(query.mock.calls[0][0].targets).toEqual([
+        { queryType: 'events', issue: 'X-1', refId: 'events', datasource: ds.getRef() },
+      ]);
+    });
+
+    it('resolves the rows and every notice in order', async () => {
+      const ds = createDataSource();
+      jest.spyOn(ds, 'query').mockReturnValue(of({ data: [eventsFrame(['first', 'second'])] }));
+
+      const list = await ds.listEvents({ refId: 'x', issue: 'X-1' });
+
+      expect(list.notices).toEqual(['first', 'second']);
+      expect(list.rows).toEqual([expect.objectContaining({ id: 'e1', eventId: 'sdk-1', issueId: 'i1' })]);
+    });
+
+    it('rejects with the message of a refused query', async () => {
+      const ds = createDataSource();
+      const message = 'An events query needs an issue, an event ID or trace:<id> in Search.';
+      jest.spyOn(ds, 'query').mockReturnValue(of({ data: [], error: { message } }));
+
+      await expect(ds.listEvents({ refId: 'x' })).rejects.toThrow(message);
+    });
+
+    it('rejects with a generic message when the error has none', async () => {
+      const ds = createDataSource();
+      jest.spyOn(ds, 'query').mockReturnValue(of({ data: [], error: { status: 502 } }));
+
+      await expect(ds.listEvents({ refId: 'x', issue: 'X-1' })).rejects.toThrow('The events could not be loaded.');
+    });
+  });
+
   it('reads the project list from the projects resource', async () => {
     const projects = [{ id: 2, name: 'sample-js' }];
     const ds = createDataSource();
     const getResource = jest.spyOn(ds, 'getResource').mockResolvedValue(projects);
 
     await expect(ds.getProjects()).resolves.toEqual(projects);
-    expect(getResource).toHaveBeenCalledWith('projects');
+    expect(getResource).toHaveBeenCalledWith('projects', undefined, { showErrorAlert: false });
   });
 
   describe('listIssues', () => {

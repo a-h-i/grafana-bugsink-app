@@ -48,9 +48,14 @@ test.describe('issue list page', () => {
       expect(events).toEqual([...events].sort((a, b) => b - a));
     }).toPass();
 
-    const link = page.locator('tbody tr').first().getByRole('link');
+    const link = page.locator('tbody tr').first().getByRole('link', { name: /^Open .* in Bugsink$/ });
     await expect(link).toHaveAttribute('href', LINK_PATTERN);
     await expect(link).toHaveAttribute('target', '_blank');
+    const first = page.locator('tbody tr').first();
+    await expect(first.getByRole('link', { name: /^SAMPLE-PYTHON-\d+$/ })).toHaveAttribute(
+      'href',
+      new RegExp(`^/a/${pluginJson.id}/issues/`)
+    );
   });
 
   test("Grafana's own address parameters stay as they are", async ({ page }) => {

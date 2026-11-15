@@ -25,6 +25,8 @@ type queryModel struct {
 	Q         string          `json:"q"`
 	Sort      string          `json:"sort"`
 	Order     string          `json:"order"`
+	Issue     string          `json:"issue"`
+	EventID   string          `json:"eventId"`
 }
 
 // QueryData answers every query of the request on its own.
@@ -40,7 +42,24 @@ func (d *Datasource) query(ctx context.Context, q backend.DataQuery) backend.Dat
 	if d.settingsErr != "" {
 		return failure(backend.StatusBadRequest, d.settingsErr)
 	}
-	filter, invalid := parseQuery(q)
+	m, project, invalid := parseModel(q)
+	if invalid != "" {
+		return failure(backend.StatusBadRequest, invalid)
+	}
+	var resp backend.DataResponse
+	if m.QueryType == queryTypeEvents {
+		resp = d.queryEvents(ctx, m, project)
+	} else {
+		resp = d.queryIssues(ctx, q, m, project)
+	}
+	for _, frame := range resp.Frames {
+		frame.RefID = q.RefID
+	}
+	return resp
+}
+
+func (d *Datasource) queryIssues(ctx context.Context, q backend.DataQuery, m queryModel, project int) backend.DataResponse {
+	filter, invalid := issuesFilter(m, project)
 	if invalid != "" {
 		return failure(backend.StatusBadRequest, invalid)
 	}
@@ -56,35 +75,57 @@ func (d *Datasource) query(ctx context.Context, q backend.DataQuery) backend.Dat
 			issues = append(issues, i)
 		}
 	}
-	frame := issuesFrame(issues, d.projectNames(ctx), d.browserURL, list.Truncated)
-	frame.RefID = q.RefID
-	return backend.DataResponse{Frames: data.Frames{frame}}
+	return backend.DataResponse{Frames: data.Frames{issuesFrame(issues, d.projectNames(ctx), d.browserURL, list.Truncated)}}
+}
+
+func (d *Datasource) queryEvents(ctx context.Context, m queryModel, project int) backend.DataResponse {
+	eq, invalid := parseEventsQuery(m, project)
+	if invalid != "" {
+		return failure(backend.StatusBadRequest, invalid)
+	}
+	if eq.namesNothing() {
+		frame := eventsFrame(nil, nil, d.browserURL, nil)
+		frame.AppendNotices(data.Notice{Severity: data.NoticeSeverityInfo, Text: eventsNamesNothing})
+		return backend.DataResponse{Frames: data.Frames{frame}}
+	}
+	res, err := d.events(ctx, eq)
+	if err != nil {
+		message, status := userMessage(err)
+		return failure(status, message)
+	}
+	return backend.DataResponse{Frames: data.Frames{eventsFrame(res.rows, d.projectNames(ctx), d.browserURL, res.notices)}}
 }
 
 func failure(status backend.Status, message string) backend.DataResponse {
 	return backend.ErrDataResponseWithSource(status, backend.ErrorSourceDownstream, message)
 }
 
-// parseQuery validates the query model and applies its defaults; invalid is the message for a bad query, or empty.
-func parseQuery(q backend.DataQuery) (f bugsink.IssueFilter, invalid string) {
-	var m queryModel
+// parseModel reads the query model and its project and checks the query type; invalid is the message for a bad query, or empty.
+func parseModel(q backend.DataQuery) (m queryModel, project int, invalid string) {
 	if len(q.JSON) > 0 {
 		if err := json.Unmarshal(q.JSON, &m); err != nil {
-			return f, "The query is not valid JSON."
+			return m, 0, "The query is not valid JSON."
 		}
 	}
 	project, err := parseProject(m.Project)
 	if err != nil {
-		return f, "The project must be a number."
+		return m, 0, "The project must be a number."
 	}
 	if m.QueryType == "" {
 		m.QueryType = q.QueryType
 	}
+	if m.QueryType != "" && !slices.Contains([]string{queryTypeIssues, queryTypeEvents}, m.QueryType) {
+		return m, 0, fmt.Sprintf("Unknown queryType %q.", m.QueryType)
+	}
+	return m, project, ""
+}
+
+// issuesFilter validates the issues fields of the query and applies their defaults; invalid is the message for a bad query, or empty.
+func issuesFilter(m queryModel, project int) (f bugsink.IssueFilter, invalid string) {
 	for _, c := range []struct {
 		key, value string
 		allowed    []string
 	}{
-		{"queryType", m.QueryType, []string{queryTypeIssues}},
 		{"state", m.State, []string{
 			string(bugsink.StateAll), string(bugsink.StateOpen), string(bugsink.StateUnresolved),
 			string(bugsink.StateResolved), string(bugsink.StateMuted)}},

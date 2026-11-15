@@ -90,6 +90,8 @@ issue links open the Bugsink on the host. `Bugsink project-bound` (uid `bugsink-
 * `Bugsink issues` (uid `bugsink-issues`, last 24 hours): a table `Unresolved issues in sample-python` with the
   unresolved issues of `sample-python` seen in `development`, newest first. Each issue is a link that opens it in
   Bugsink. The table needs a recent event; create one with `curl http://localhost:8810/handled`.
+* `Bugsink trace` (uid `bugsink-trace`, last 24 hours): the issues and the events of one trace. Paste a trace id from
+  `curl http://localhost:8810/handled` into `Trace ID`.
 * `Bugsink e2e: refused query` (uid `bugsink-e2e-refused`): a panel for a project that does not exist, used by the
   end-to-end tests to check that a refused query shows Bugsink's message.
 

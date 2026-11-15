@@ -241,3 +241,73 @@ func TestBaseURL(t *testing.T) {
 		}
 	}
 }
+
+func TestGetIssue(t *testing.T) {
+	var path string
+	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		path = r.URL.Path
+		_, _ = fmt.Fprint(w, realIssue)
+	})
+	got, err := c.GetIssue(context.Background(), "SAMPLE-PYTHON-2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := Issue{
+		ID: "fe36e79c-e229-428a-9650-c5f31ad3fdc1", FriendlyID: "SAMPLE-PYTHON-2", ProjectID: 1,
+		Type: "LookupError", Value: "failure outside any span", Transaction: "/no-trace",
+		FirstSeen:          time.Date(2026, 11, 13, 23, 6, 16, 473890000, time.UTC),
+		LastSeen:           time.Date(2026, 11, 15, 4, 47, 36, 852841000, time.UTC),
+		DigestedEventCount: 18, StoredEventCount: 18,
+	}
+	if path != "/api/canonical/0/issues/SAMPLE-PYTHON-2/" || !reflect.DeepEqual(got, want) {
+		t.Fatalf("path %q got %+v\nwant %+v", path, got, want)
+	}
+
+	notFound := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(404)
+		_, _ = fmt.Fprint(w, `{"detail":"No Issue matches the given query."}`)
+	})
+	_, err = notFound.GetIssue(context.Background(), "x")
+	var apiErr *APIError
+	if !errors.As(err, &apiErr) || apiErr.Status != 404 || apiErr.Detail != "No Issue matches the given query." {
+		t.Fatalf("error = %v", err)
+	}
+}
+
+func TestFirstIssues(t *testing.T) {
+	cases := []struct {
+		name     string
+		count    int
+		next     string
+		wantLen  int
+		wantMore bool
+	}{
+		{"page over n", 12, "", 10, true},
+		{"next set", 3, "http://x/issues/?cursor=more", 3, true},
+		{"last page", 3, "", 3, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			requests := 0
+			var query url.Values
+			c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+				requests++
+				query = r.URL.Query()
+				items := make([]string, tc.count)
+				for i := range items {
+					items[i] = issueJSON(fmt.Sprintf("P-%d", i+1), "2026-01-01T00:00:00Z")
+				}
+				_, _ = fmt.Fprint(w, page(tc.next, items...))
+			})
+			f := IssueFilter{State: StateAll, Query: "trace:abc", Sort: SortLastSeen, Order: Desc}
+			issues, more, err := c.FirstIssues(context.Background(), f, 10)
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := url.Values{"q": {"trace:abc"}, "state": {"all"}, "sort": {"last_seen"}, "order": {"desc"}}
+			if requests != 1 || len(issues) != tc.wantLen || more != tc.wantMore || !reflect.DeepEqual(query, want) {
+				t.Fatalf("requests %d issues %d more %v query %v", requests, len(issues), more, query)
+			}
+		})
+	}
+}

@@ -120,3 +120,79 @@ func TestIssuesFrameEmpty(t *testing.T) {
 		}
 	}
 }
+
+var eventContractFields = []fieldSpec{
+	{"timestamp", "Timestamp", data.FieldTypeTime},
+	{"event_id", "Event ID", data.FieldTypeString},
+	{"issue", "Issue", data.FieldTypeString},
+	{"project", "Project", data.FieldTypeString},
+	{"ingested_at", "Ingested at", data.FieldTypeTime},
+	{"id", "", data.FieldTypeString},
+	{"issue_id", "", data.FieldTypeString},
+	{"project_id", "Project ID", data.FieldTypeInt64},
+}
+
+func TestEventsFrame(t *testing.T) {
+	ts := time.Date(2026, 2, 1, 0, 0, 0, 0, time.UTC)
+	ingested := time.Date(2026, 2, 1, 0, 0, 5, 0, time.UTC)
+	rows := []eventRow{
+		{event: bugsink.Event{ID: "e-1", EventID: "sdk-1", IssueID: "i-1", ProjectID: 1, Timestamp: ts, IngestedAt: ingested}, issue: "SAMPLE-1"},
+		{event: bugsink.Event{ID: "e-2", EventID: "sdk-2", IssueID: "i-2", ProjectID: 9, Timestamp: ts, IngestedAt: ingested}, issue: "SAMPLE-2"},
+	}
+	frame := eventsFrame(rows, map[int]string{1: "alpha"}, "http://b", []string{"first", "second"})
+
+	if frame.Name != "events" || frame.Meta == nil || frame.Meta.PreferredVisualization != data.VisTypeTable {
+		t.Fatalf("frame name %q meta %+v", frame.Name, frame.Meta)
+	}
+	if len(frame.Fields) != len(eventContractFields) {
+		t.Fatalf("%d fields, want %d", len(frame.Fields), len(eventContractFields))
+	}
+	for i, want := range eventContractFields {
+		f := frame.Fields[i]
+		if f.Name != want.name || f.Type() != want.typ || f.Config == nil && want.display != "" ||
+			f.Config != nil && f.Config.DisplayNameFromDS != want.display {
+			t.Errorf("field %d: %q %v %+v, want %+v", i, f.Name, f.Type(), f.Config, want)
+		}
+		if want.name != "event_id" && f.Config != nil && len(f.Config.Links) != 0 {
+			t.Errorf("field %q has links", f.Name)
+		}
+	}
+	wantLink := data.DataLink{
+		Title: "Open in Bugsink", URL: "http://b/issues/issue/${__data.fields.issue_id}/event/${__data.fields.id}/", TargetBlank: true,
+	}
+	if links := frame.Fields[1].Config.Links; len(links) != 1 || links[0] != wantLink {
+		t.Fatalf("links %+v, want %+v", links, wantLink)
+	}
+
+	want := [][]any{
+		{ts, "sdk-1", "SAMPLE-1", "alpha", ingested, "e-1", "i-1", int64(1)},
+		{ts, "sdk-2", "SAMPLE-2", "9", ingested, "e-2", "i-2", int64(9)},
+	}
+	for i, w := range want {
+		got := make([]any, len(frame.Fields))
+		for j := range got {
+			got[j] = frame.Fields[j].At(i)
+		}
+		if !reflect.DeepEqual(got, w) {
+			t.Errorf("row %d:\n got %v\nwant %v", i, got, w)
+		}
+	}
+	wantNotices := []data.Notice{
+		{Severity: data.NoticeSeverityWarning, Text: "first"}, {Severity: data.NoticeSeverityWarning, Text: "second"},
+	}
+	if !reflect.DeepEqual(frame.Meta.Notices, wantNotices) {
+		t.Fatalf("notices %+v", frame.Meta.Notices)
+	}
+}
+
+func TestEventsFrameEmpty(t *testing.T) {
+	frame := eventsFrame(nil, nil, "http://b", nil)
+	if len(frame.Fields) != len(eventContractFields) {
+		t.Fatalf("%d fields, want %d", len(frame.Fields), len(eventContractFields))
+	}
+	for i, f := range frame.Fields {
+		if f.Len() != 0 || f.Type() != eventContractFields[i].typ {
+			t.Errorf("field %q has %d rows of %v", f.Name, f.Len(), f.Type())
+		}
+	}
+}

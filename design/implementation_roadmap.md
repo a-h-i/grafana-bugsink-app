@@ -107,16 +107,17 @@ source's issues query, reuses the query editor as its filter bar and keeps its s
 
 ### M4: Issue detail & events
 
-* **Scope:** issue detail page (summary, tag values with counts (`events:read`), history from
-  `GET /issue-history/`); events query type in the data source (list for one issue with `q`, lookup by
-  SDK event id) returning a table frame; search by trace through the issue list
-  (`GET /issues/?q=trace:<id>`, then the events of those issues), since `/events/` needs an issue: the
-  events query does both steps itself; event list on the issue page in Bugsink's arrival order, newest
-  first; `CallResource` routes for the
-  detail reads.
+Built; see [`plans/m4-issue-detail-and-events.md`](plans/m4-issue-detail-and-events.md). The detail page reads through
+resource routes, and the events query type runs in the data source.
+
+* **Scope:** issue detail page (summary, tag values with counts (`events:read`), history, and the issue's events in
+  Bugsink's arrival order, newest first); events query type in the data source (the events of one issue with `q`,
+  lookup by SDK event id, and the events of a trace through the issue search) returning a table frame, with no
+  time range and with bounds that add notices; the short id in the list opens the detail page and an icon opens
+  Bugsink; `CallResource` routes for the detail reads; a provisioned `Bugsink trace` dashboard.
 * **Demo:** click an issue in the list, see its summary, tags and history, and a list of its events; an
   issues table panel on a dashboard filtered by `trace:<id>`, and an events table panel that shows the
-  events of the same trace from one query.
+  events of the same trace from one query. Both run as e2e tests.
 * **Not yet:** event content. An event row shows ids and timestamps only.
 
 ### M5: Event detail

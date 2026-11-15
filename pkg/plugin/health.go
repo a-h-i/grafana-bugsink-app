@@ -24,7 +24,7 @@ const maxListedProjects = 10
 // prober is the part of the Bugsink client the health check needs.
 type prober interface {
 	ListProjects(ctx context.Context) ([]bugsink.Project, error)
-	GetIssue(ctx context.Context, id string) error
+	GetIssue(ctx context.Context, id string) (bugsink.Issue, error)
 	ListEventsWithoutIssue(ctx context.Context) error
 }
 
@@ -44,7 +44,7 @@ func checkHealth(ctx context.Context, url string, timeout time.Duration, p probe
 	var projects []bugsink.Project
 	probes := []probe{
 		{bugsink.ProjectsRead, 0, func() (err error) { projects, err = p.ListProjects(ctx); return }},
-		{bugsink.IssuesRead, 404, func() error { return p.GetIssue(ctx, absentIssueID) }},
+		{bugsink.IssuesRead, 404, func() (err error) { _, err = p.GetIssue(ctx, absentIssueID); return }},
 		{bugsink.EventsRead, 400, func() error { return p.ListEventsWithoutIssue(ctx) }},
 	}
 

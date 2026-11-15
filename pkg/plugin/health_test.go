@@ -25,9 +25,9 @@ func (f *fakeProber) ListProjects(context.Context) ([]bugsink.Project, error) {
 	return f.projects, f.projectsErr
 }
 
-func (f *fakeProber) GetIssue(_ context.Context, id string) error {
+func (f *fakeProber) GetIssue(_ context.Context, id string) (bugsink.Issue, error) {
 	f.ran = append(f.ran, "issue")
-	return f.issueErr
+	return bugsink.Issue{}, f.issueErr
 }
 
 func (f *fakeProber) ListEventsWithoutIssue(context.Context) error {

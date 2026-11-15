@@ -41,6 +41,7 @@ vendor/
 /blob-report/
 /playwright/.cache/
 /playwright/.auth/
+/playwright/.trace.json
 
 # Local dev stack data and secrets
 .env

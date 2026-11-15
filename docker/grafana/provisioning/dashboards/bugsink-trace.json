@@ -1,0 +1,108 @@
+{
+  "uid": "bugsink-trace",
+  "title": "Bugsink trace",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "templating": {
+    "list": [
+      {
+        "type": "textbox",
+        "name": "trace",
+        "label": "Trace ID",
+        "query": "",
+        "current": {
+          "text": "",
+          "value": ""
+        },
+        "options": [
+          {
+            "selected": true,
+            "text": "",
+            "value": ""
+          }
+        ],
+        "hide": 0
+      }
+    ]
+  },
+  "annotations": {
+    "list": []
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "table",
+      "title": "Issues in this trace",
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "datasource": {
+        "type": "ahmedismail-bugsink-datasource",
+        "uid": "bugsink"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "ahmedismail-bugsink-datasource",
+            "uid": "bugsink"
+          },
+          "queryType": "issues",
+          "state": "all",
+          "q": "trace:$trace",
+          "sort": "last_seen",
+          "order": "desc"
+        }
+      ],
+      "options": {
+        "showHeader": true
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      }
+    },
+    {
+      "id": 2,
+      "type": "table",
+      "title": "Events in this trace",
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 10
+      },
+      "datasource": {
+        "type": "ahmedismail-bugsink-datasource",
+        "uid": "bugsink"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "ahmedismail-bugsink-datasource",
+            "uid": "bugsink"
+          },
+          "queryType": "events",
+          "q": "trace:$trace"
+        }
+      ],
+      "options": {
+        "showHeader": true
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      }
+    }
+  ]
+}

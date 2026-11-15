@@ -1,81 +1,47 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import React, { useEffect, useMemo, useState } from 'react';
-import { DataSourceInstanceSettings, TimeRange, toURLRange } from '@grafana/data';
-import { config, getDataSourceSrv, PluginPage } from '@grafana/runtime';
-import {
-  Alert,
-  Combobox,
-  EmptyState,
-  Field,
-  LoadingBar,
-  LoadingPlaceholder,
-  RefreshPicker,
-  TextLink,
-  TimeRangePicker,
-} from '@grafana/ui';
+import { TimeRange, toURLRange } from '@grafana/data';
+import { config, PluginPage } from '@grafana/runtime';
+import { Alert, Combobox, Field, LoadingBar, LoadingPlaceholder, RefreshPicker, TimeRangePicker } from '@grafana/ui';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { BugsinkDataSource } from '../datasource/datasource';
-import { QueryEditor } from '../datasource/components/QueryEditor';
+import { IssuesQueryEditor } from '../datasource/components/IssuesQueryEditor';
 import { BugsinkQuery, IssueList } from '../datasource/types';
 import { IssueTable } from './issues/IssueTable';
 import { ListState, listSearch, readListState, writeListState } from './issues/listState';
+import { NoDataSource } from './NoDataSource';
+import { issuePath } from './routes';
+import { useDataSource } from './useDataSource';
 import { shiftTimeRange, toTimeRange, zoomOutTimeRange } from './issues/timeRange';
-
-const DATASOURCE_TYPE = 'ahmedismail-bugsink-datasource';
 
 type Outcome = { source: BugsinkDataSource; key: string } & ({ list: IssueList } | { error: string });
 
 const keyOf = (canonical: string, refresh: number) => `${canonical}#${refresh}`;
 
-function defaultInstance(instances: DataSourceInstanceSettings[]): DataSourceInstanceSettings | undefined {
-  return (
-    instances.find((instance) => instance.isDefault) ?? [...instances].sort((a, b) => a.name.localeCompare(b.name))[0]
-  );
-}
-
 export function IssuesPage(): React.JSX.Element {
   const location = useLocation();
   const navigate = useNavigate();
-  const instances = getDataSourceSrv().getList({ pluginId: DATASOURCE_TYPE });
   const urlState = useMemo(() => readListState(new URLSearchParams(location.search)), [location.search]);
   const requested = urlState.ds;
-  const unknown = requested !== undefined && !instances.some((instance) => instance.uid === requested);
-  const uid = requested ?? defaultInstance(instances)?.uid;
+  const [refresh, setRefresh] = useState(0);
+  const choice = useDataSource(requested, refresh);
+  const { instances, uid, unknown, source, failed } = choice;
   const range = toTimeRange(urlState.from, urlState.to);
   const urlRange = toURLRange(range.raw);
   const state: ListState = { ...urlState, ds: uid, from: String(urlRange.from), to: String(urlRange.to) };
 
   const [timeZone, setTimeZone] = useState(config.bootData.user.timezone);
-  const [refresh, setRefresh] = useState(0);
-  const [loaded, setLoaded] = useState<{ uid: string; source?: BugsinkDataSource }>();
   const [outcome, setOutcome] = useState<Outcome>();
 
   const canonical = writeListState(state).toString();
   const key = keyOf(canonical, refresh);
   const wanted = listSearch(state, location.search);
-  const mine = loaded && loaded.uid === uid ? loaded : undefined;
-  const source = mine?.source;
-  const failed = mine !== undefined && !mine.source;
 
   useEffect(() => {
     if (uid && wanted !== location.search) {
       navigate({ search: wanted }, { replace: true });
     }
   }, [uid, wanted, location.search, navigate]);
-
-  useEffect(() => {
-    if (!uid || unknown) {
-      return;
-    }
-    let active = true;
-    getDataSourceSrv()
-      .get(uid)
-      .then((instance) => active && setLoaded({ uid, source: instance as BugsinkDataSource }))
-      .catch(() => active && setLoaded({ uid }));
-    return () => {
-      active = false;
-    };
-  }, [uid, unknown]);
 
   useEffect(() => {
     if (!source) {
@@ -101,9 +67,7 @@ export function IssuesPage(): React.JSX.Element {
   if (instances.length === 0) {
     return (
       <PluginPage>
-        <EmptyState variant="call-to-action" message="No Bugsink data source yet.">
-          <TextLink href="/connections/datasources/new">Add a Bugsink data source</TextLink>
-        </EmptyState>
+        <NoDataSource choice={choice} />
       </PluginPage>
     );
   }
@@ -121,7 +85,6 @@ export function IssuesPage(): React.JSX.Element {
   };
 
   const current = outcome?.source === source ? outcome : undefined;
-  const name = instances.find((instance) => instance.uid === uid)?.name;
 
   const actions = [
     <TimeRangePicker
@@ -154,13 +117,20 @@ export function IssuesPage(): React.JSX.Element {
           onChange={({ value }) => onInstanceChange(value)}
         />
       </Field>
-      {unknown && <Alert severity="error" title={`The data source "${requested}" was not found.`} />}
-      {source && <QueryEditor datasource={source} query={state.query} onChange={onQueryChange} onRunQuery={() => {}} />}
-      {failed && <Alert severity="error" title={`The data source "${name}" could not be loaded.`} />}
+      <NoDataSource choice={choice} requested={requested} />
+      {source && (
+        <IssuesQueryEditor datasource={source} query={state.query} onChange={onQueryChange} onRunQuery={() => {}} />
+      )}
       {current && current.key !== key && <LoadingBar width={600} />}
       {current && 'error' in current && <Alert severity="error" title={current.error} />}
       {current && 'list' in current && current.list.notice && <Alert severity="warning" title={current.list.notice} />}
-      {current && 'list' in current && <IssueTable rows={current.list.rows} timeZone={timeZone} />}
+      {current && 'list' in current && (
+        <IssueTable
+          rows={current.list.rows}
+          timeZone={timeZone}
+          issueHref={(row) => issuePath(row.id, location.search)}
+        />
+      )}
       {!unknown && !failed && !current && <LoadingPlaceholder text="Loading issues..." />}
     </PluginPage>
   );

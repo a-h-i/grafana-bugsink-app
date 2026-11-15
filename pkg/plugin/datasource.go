@@ -14,6 +14,7 @@ import (
 	"github.com/grafana/grafana-plugin-sdk-go/backend"
 	"github.com/grafana/grafana-plugin-sdk-go/backend/httpclient"
 	"github.com/grafana/grafana-plugin-sdk-go/backend/instancemgmt"
+	"github.com/grafana/grafana-plugin-sdk-go/backend/resource/httpadapter"
 )
 
 // Datasource is one Bugsink data source instance.
@@ -26,6 +27,8 @@ type Datasource struct {
 	healthTimeout time.Duration
 	issueCache    *cache[bugsink.IssueList]
 	projectCache  *cache[projectsResult]
+	eventCache    *cache[eventsResult]
+	resources     backend.CallResourceHandler
 }
 
 var (
@@ -50,8 +53,10 @@ func NewDatasource(ctx context.Context, s backend.DataSourceInstanceSettings) (i
 		healthTimeout: defaultHealthTimeout,
 		issueCache:    newCache[bugsink.IssueList](cacheTTL, cacheMaxEntries),
 		projectCache:  newCache[projectsResult](cacheTTL, cacheMaxEntries),
+		eventCache:    newCache[eventsResult](cacheTTL, cacheMaxEntries),
 	}
 	d.settingsErr = d.configure(ctx, s)
+	d.resources = httpadapter.New(canonical(d.routes()))
 	return d, nil
 }
 

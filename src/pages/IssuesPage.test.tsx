@@ -253,6 +253,28 @@ describe('IssuesPage', () => {
     expect(spinning()).toBe(false);
   });
 
+  it('refresh loads a data source that failed to load', async () => {
+    mockGet.mockRejectedValueOnce(new Error('plugin failed'));
+    renderPage('?ds=bugsink');
+    await screen.findByText('The data source "Bugsink" could not be loaded.');
+
+    fireEvent.click(screen.getByTestId('data-testid RefreshPicker run button'));
+
+    expect(await screen.findByText('BUGSINK-1')).toBeInTheDocument();
+    expect(mockGet).toHaveBeenCalledTimes(2);
+    expect(screen.queryByText('The data source "Bugsink" could not be loaded.')).not.toBeInTheDocument();
+  });
+
+  it('links each issue to its detail page with the address parameters', async () => {
+    renderPage('?orgId=1&kiosk&ds=bugsink&state=open');
+
+    const link = await screen.findByRole('link', { name: 'BUGSINK-1' });
+    expect(link).toHaveAttribute(
+      'href',
+      '/a/ahmedismail-bugsink-app/issues/bugsink-1?orgId=1&kiosk&ds=bugsink&state=open&sort=last_seen&order=desc&from=now-7d&to=now'
+    );
+  });
+
   it('falls back to defaults for an invalid project and range', async () => {
     renderPage('?project=abc&from=garbage');
 

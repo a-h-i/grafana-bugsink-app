@@ -63,7 +63,7 @@ func New(baseURL, token string, httpClient *http.Client) (*Client, error) {
 // ListProjects returns the projects the token can see, following next until it is null or MaxPages is reached.
 func (c *Client) ListProjects(ctx context.Context) ([]Project, error) {
 	var projects []Project
-	_, err := listPages(ctx, func(cursor *string) (*http.Response, error) {
+	_, err := listPages(ctx, MaxPages, func(cursor *string) (*http.Response, error) {
 		return c.gen.ProjectsList(ctx, &gen.ProjectsListParams{Cursor: cursor})
 	}, func(results []gen.ProjectList) bool {
 		for _, p := range results {
@@ -80,8 +80,17 @@ func (c *Client) ListProjects(ctx context.Context) ([]Project, error) {
 // BaseURL is the Bugsink address without the API path or a trailing slash.
 func (c *Client) BaseURL() string { return c.baseURL }
 
-// listPages requests pages with the cursor taken from next until next is null, onPage returns true or MaxPages is reached.
-func listPages[T any](ctx context.Context, fetch func(cursor *string) (*http.Response, error),
+// PageSize is the number of results per page of every Bugsink list.
+const PageSize = 250
+
+// pageBody is the envelope of every Bugsink list answer.
+type pageBody[T any] struct {
+	Next    *string `json:"next"`
+	Results []T     `json:"results"`
+}
+
+// listPages requests pages with the cursor taken from next until next is null, onPage returns true or maxPages is reached.
+func listPages[T any](ctx context.Context, maxPages int, fetch func(cursor *string) (*http.Response, error),
 	onPage func(results []T) (stop bool)) (truncated bool, err error) {
 	var cursor *string
 	for pages := 1; ; pages++ {
@@ -89,10 +98,7 @@ func listPages[T any](ctx context.Context, fetch func(cursor *string) (*http.Res
 		if err != nil {
 			return false, err
 		}
-		var body struct {
-			Next    *string `json:"next"`
-			Results []T     `json:"results"`
-		}
+		var body pageBody[T]
 		if err := decodeJSON(resp, &body); err != nil {
 			return false, err
 		}
@@ -109,7 +115,7 @@ func listPages[T any](ctx context.Context, fetch func(cursor *string) (*http.Res
 		if cursor != nil && *cursor == next {
 			return false, fmt.Errorf("%w: next page repeats the cursor", ErrNotBugsink)
 		}
-		if pages >= MaxPages {
+		if pages >= maxPages {
 			return true, nil
 		}
 		if err := ctx.Err(); err != nil {
@@ -117,12 +123,6 @@ func listPages[T any](ctx context.Context, fetch func(cursor *string) (*http.Res
 		}
 		cursor = &next
 	}
-}
-
-// GetIssue reads one issue and discards it; it exists to probe the issues:read capability.
-func (c *Client) GetIssue(ctx context.Context, id string) error {
-	resp, err := c.gen.IssuesRetrieve(ctx, id)
-	return expectSuccess(resp, err)
 }
 
 // ListEventsWithoutIssue lists events with no issue filter; it exists to probe the events:read capability.

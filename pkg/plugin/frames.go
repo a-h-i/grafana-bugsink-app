@@ -71,8 +71,54 @@ func issuesFrame(issues []bugsink.Issue, projectNames map[int]string, browserURL
 	if truncated {
 		frame.AppendNotices(data.Notice{
 			Severity: data.NoticeSeverityWarning,
-			Text:     fmt.Sprintf("Only the first %d issues were read. Narrow the search or the time range.", bugsink.MaxPages*250),
+			Text:     fmt.Sprintf("Only the first %d issues were read. Narrow the search or the time range.", bugsink.MaxPages*bugsink.PageSize),
 		})
+	}
+	return frame
+}
+
+// eventsFrame builds the events frame of the frame contract, with each notice as a warning.
+func eventsFrame(rows []eventRow, projectNames map[int]string, browserURL string, notices []string) *data.Frame {
+	var (
+		eventID, issue, project, id, issueID []string
+		timestamp, ingestedAt                []time.Time
+		projectID                            []int64
+	)
+	for _, r := range rows {
+		e := r.event
+		name, ok := projectNames[e.ProjectID]
+		if !ok {
+			name = strconv.Itoa(e.ProjectID)
+		}
+		timestamp = append(timestamp, e.Timestamp)
+		eventID = append(eventID, e.EventID)
+		issue = append(issue, r.issue)
+		project = append(project, name)
+		ingestedAt = append(ingestedAt, e.IngestedAt)
+		id = append(id, e.ID)
+		issueID = append(issueID, e.IssueID)
+		projectID = append(projectID, int64(e.ProjectID))
+	}
+
+	eventIDField := field("event_id", "Event ID", orEmpty(eventID))
+	eventIDField.Config.Links = []data.DataLink{{
+		Title:       "Open in Bugsink",
+		URL:         browserURL + "/issues/issue/${__data.fields.issue_id}/event/${__data.fields.id}/",
+		TargetBlank: true,
+	}}
+	frame := data.NewFrame("events",
+		field("timestamp", "Timestamp", orEmpty(timestamp)),
+		eventIDField,
+		field("issue", "Issue", orEmpty(issue)),
+		field("project", "Project", orEmpty(project)),
+		field("ingested_at", "Ingested at", orEmpty(ingestedAt)),
+		data.NewField("id", nil, orEmpty(id)),
+		data.NewField("issue_id", nil, orEmpty(issueID)),
+		field("project_id", "Project ID", orEmpty(projectID)),
+	)
+	frame.Meta = &data.FrameMeta{PreferredVisualization: data.VisTypeTable}
+	for _, text := range notices {
+		frame.AppendNotices(data.Notice{Severity: data.NoticeSeverityWarning, Text: text})
 	}
 	return frame
 }

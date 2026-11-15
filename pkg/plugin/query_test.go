@@ -44,6 +44,21 @@ type fakeBugsink struct {
 	projectsBody   string // result objects of the project list, or empty for one project
 	projectCalls   int
 	errorBody      string // body of a failing project list, or empty for a bare detail
+	paths          []string
+	issueBody      string              // body of the issue detail, or empty for a default issue
+	tagsBody       string              // result objects of the tag list
+	tagsEndless    bool                // every tag page has a successor
+	historyBody    string              // result objects of the history list
+	detailStatus   int                 // status of every detail endpoint, 0 for success
+	detailError    string              // body of a failing detail endpoint
+	issueBodies    map[string]string   // issue detail bodies by the id in the path
+	eventPages     map[string][]string // result objects of each event list page, by issue uuid
+	eventsEndless  bool                // every event page has a successor
+	eventsStatus   int                 // status of the event list, 0 for success
+	eventRequests  []url.Values
+	lookupRequests []url.Values
+	lookupStatus   int    // status of the event lookup, 0 for success
+	lookupBody     string // body of the event lookup, or empty for a default event
 	srv            *httptest.Server
 }
 
@@ -57,6 +72,9 @@ func newFakeBugsink(t *testing.T) *fakeBugsink {
 
 func (f *fakeBugsink) serve(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
+	f.mu.Lock()
+	f.paths = append(f.paths, r.URL.Path)
+	f.mu.Unlock()
 	switch r.URL.Path {
 	case "/api/canonical/0/projects/":
 		f.mu.Lock()
@@ -100,9 +118,130 @@ func (f *fakeBugsink) serve(w http.ResponseWriter, r *http.Request) {
 			results = issueAt("E", rangeTo.Add(-time.Hour))
 		}
 		_, _ = fmt.Fprintf(w, `{"next":%s,"previous":null,"results":[%s]}`, next, results)
+	case "/api/canonical/0/events/":
+		f.serveEvents(w, r)
+	case "/api/canonical/0/events/lookup/":
+		f.serveLookup(w, r)
 	default:
-		w.WriteHeader(http.StatusNotFound)
+		f.serveDetail(w, r)
 	}
+}
+
+// serveEvents answers the event list of one issue and records the request.
+func (f *fakeBugsink) serveEvents(w http.ResponseWriter, r *http.Request) {
+	query := r.URL.Query()
+	f.mu.Lock()
+	f.eventRequests = append(f.eventRequests, query)
+	status, pages, endless := f.eventsStatus, f.eventPages[query.Get("issue")], f.eventsEndless
+	f.mu.Unlock()
+	if status != 0 {
+		w.WriteHeader(status)
+		_, _ = fmt.Fprint(w, `{"detail":"nope"}`)
+		return
+	}
+	n := 0
+	if c := query.Get("cursor"); c != "" {
+		_, _ = fmt.Sscan(c, &n)
+	}
+	next := "null"
+	if n+1 < len(pages) || endless {
+		next = fmt.Sprintf("%q", fmt.Sprintf("%s/api/canonical/0/events/?cursor=%d", f.srv.URL, n+1))
+	}
+	results := ""
+	if n < len(pages) {
+		results = pages[n]
+	} else if endless {
+		results = eventAt(defaultEventID, defaultEventSDKID, defaultIssueUUID, olderThanRange)
+	}
+	_, _ = fmt.Fprintf(w, `{"next":%s,"previous":null,"results":[%s]}`, next, results)
+}
+
+// serveLookup answers the event lookup and records the request.
+func (f *fakeBugsink) serveLookup(w http.ResponseWriter, r *http.Request) {
+	f.mu.Lock()
+	f.lookupRequests = append(f.lookupRequests, r.URL.Query())
+	status, body := f.lookupStatus, f.lookupBody
+	f.mu.Unlock()
+	if status != 0 {
+		w.WriteHeader(status)
+	}
+	if body == "" {
+		body = eventAt(defaultEventID, defaultEventSDKID, defaultIssueUUID, olderThanRange)
+	}
+	_, _ = fmt.Fprint(w, body)
+}
+
+// serveDetail answers the issue, tag and history reads.
+func (f *fakeBugsink) serveDetail(w http.ResponseWriter, r *http.Request) {
+	path := r.URL.Path
+	isTags := strings.HasPrefix(path, "/api/canonical/0/issues/") && strings.HasSuffix(path, "/tags/")
+	isIssue := strings.HasPrefix(path, "/api/canonical/0/issues/") && !isTags
+	isHistory := path == "/api/canonical/0/issue-history/"
+	if !isTags && !isIssue && !isHistory {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+	if f.detailStatus != 0 {
+		w.WriteHeader(f.detailStatus)
+		_, _ = fmt.Fprint(w, f.detailError)
+		return
+	}
+	switch {
+	case isIssue:
+		id := strings.TrimSuffix(strings.TrimPrefix(path, "/api/canonical/0/issues/"), "/")
+		f.mu.Lock()
+		body := f.issueBodies[id]
+		f.mu.Unlock()
+		if body == "" {
+			body = f.issueBody
+		}
+		if body == "" {
+			body = issueAt("SAMPLE-PYTHON-2", rangeTo)
+		}
+		_, _ = fmt.Fprint(w, body)
+	case isTags:
+		next := "null"
+		if f.tagsEndless {
+			n := 0
+			if c := r.URL.Query().Get("cursor"); c != "" {
+				_, _ = fmt.Sscan(c, &n)
+			}
+			next = fmt.Sprintf("%q", fmt.Sprintf("%s%s?cursor=%d", f.srv.URL, path, n+1))
+		}
+		_, _ = fmt.Fprintf(w, `{"next":%s,"previous":null,"results":[%s]}`, next, f.tagsBody)
+	default:
+		_, _ = fmt.Fprintf(w, `{"next":null,"previous":null,"results":[%s]}`, f.historyBody)
+	}
+}
+
+func (f *fakeBugsink) setEventsStatus(status int) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.eventsStatus = status
+}
+
+func (f *fakeBugsink) eventRequestList() []url.Values {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]url.Values(nil), f.eventRequests...)
+}
+
+func (f *fakeBugsink) requestCount() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return len(f.paths)
+}
+
+func (f *fakeBugsink) pathCount(path string) int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	n := 0
+	for _, p := range f.paths {
+		if p == path {
+			n++
+		}
+	}
+	return n
 }
 
 func (f *fakeBugsink) issueRequests() []url.Values {

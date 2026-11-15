@@ -4,6 +4,7 @@ package bugsink
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -70,7 +71,7 @@ func (c *Client) ListIssues(ctx context.Context, f IssueFilter, seenSince time.T
 	if bounded {
 		list.SeenSince = seenSince
 	}
-	truncated, err := listPages(ctx, func(cursor *string) (*http.Response, error) {
+	truncated, err := listPages(ctx, MaxPages, func(cursor *string) (*http.Response, error) {
 		return c.gen.IssuesList(ctx, issuesParams(f, cursor))
 	}, func(results []gen.Issue) bool {
 		for _, r := range results {
@@ -86,6 +87,39 @@ func (c *Client) ListIssues(ctx context.Context, f IssueFilter, seenSince time.T
 	}
 	list.Truncated = truncated
 	return list, nil
+}
+
+// GetIssue reads one issue by its uuid or short id.
+func (c *Client) GetIssue(ctx context.Context, id string) (Issue, error) {
+	resp, err := c.gen.IssuesRetrieve(ctx, id)
+	if err != nil {
+		return Issue{}, err
+	}
+	var body gen.Issue
+	if err := decodeJSON(resp, &body); err != nil {
+		return Issue{}, err
+	}
+	return issueOf(body), nil
+}
+
+// FirstIssues reads one page of issues and returns the first n; more is true when the page held more than n or had a next page.
+func (c *Client) FirstIssues(ctx context.Context, f IssueFilter, n int) (issues []Issue, more bool, err error) {
+	resp, err := c.gen.IssuesList(ctx, issuesParams(f, nil))
+	if err != nil {
+		return nil, false, err
+	}
+	var body pageBody[gen.Issue]
+	if err := decodeJSON(resp, &body); err != nil {
+		return nil, false, err
+	}
+	if body.Results == nil {
+		return nil, false, fmt.Errorf("%w: %w", ErrNotBugsink, &APIError{Status: resp.StatusCode})
+	}
+	more = len(body.Results) > n || (body.Next != nil && *body.Next != "")
+	for _, r := range body.Results[:min(n, len(body.Results))] {
+		issues = append(issues, issueOf(r))
+	}
+	return issues, more, nil
 }
 
 func issuesParams(f IssueFilter, cursor *string) *gen.IssuesListParams {

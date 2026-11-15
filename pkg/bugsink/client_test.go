@@ -214,7 +214,7 @@ func TestUnauthorized(t *testing.T) {
 func TestProbeAnswers(t *testing.T) {
 	srv := answer(404, `{"detail":"No Issue matches the given query."}`)
 	c, _ := New(srv.URL, "t", nil)
-	err := c.GetIssue(context.Background(), "00000000-0000-0000-0000-000000000000")
+	_, err := c.GetIssue(context.Background(), "00000000-0000-0000-0000-000000000000")
 	srv.Close()
 	var apiErr *APIError
 	if !errors.As(err, &apiErr) || apiErr.Status != 404 || apiErr.Capability != "" {
@@ -236,6 +236,20 @@ func TestAPIErrorFieldErrors(t *testing.T) {
 			"sort: Must be 'digest_order', 'last_seen', or 'digested_event_count'."},
 		{`{"state":["bad state","second"],"order":["bad order"]}`, "order: bad order state: bad state"},
 		{`{"detail":"nope"}`, "nope"},
+	}
+	for _, tc := range cases {
+		e := newAPIError(400, []byte(tc.body))
+		if e.Status != 400 || e.Detail != tc.detail {
+			t.Errorf("body %s: got %+v, want detail %q", tc.body, e, tc.detail)
+		}
+	}
+}
+
+func TestAPIErrorListBody(t *testing.T) {
+	cases := []struct{ body, detail string }{
+		{`["Invalid issue identifier."]`, "Invalid issue identifier."},
+		{`["first","second"]`, "first second"},
+		{`[1]`, ""},
 	}
 	for _, tc := range cases {
 		e := newAPIError(400, []byte(tc.body))

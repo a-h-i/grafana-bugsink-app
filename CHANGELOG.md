@@ -7,3 +7,5 @@
 - Query editor with Project, State, Sort by, Order and Search controls.
 - `Browser URL` setting: the address of Bugsink as the browser reaches it, used for the issue links.
 - Issue list page in the app: pick a Bugsink instance, filter by project, state, search and time range, sort by last seen or event count, link to each issue in Bugsink; the page state is kept in the URL.
+- Issue detail page in the app: summary, tag values with counts, history and the issue's events; the list's short id opens it.
+- Events query: the events of one issue, one event looked up by its SDK id, or every event of a trace, as a table.

@@ -86,22 +86,25 @@
 * **Issue extras:** tag values with counts (`issues/{id}/tags/`, needs `events:read`), issue history (state changes and comments with author names, `GET /issue-history/?issue=`), hourly event counts (`issues/{id}/event-counts/`).
 
 ### C. Event Queries
+* **Modes:** the events query type takes `project`, `q`, `issue` and `eventId`; the first that applies wins: `eventId` (lookup; needs a project), `issue` (that issue's events, narrowed by `q`; `project` unused), a `trace:<id>` term in `q` (the fan-out; `project` narrows its issue search). With none of the three the answer is an empty table with an info notice, not an error; a bad issue id, a bad event id and a lookup without a project are 400. `state`, `sort` and `order` are ignored.
+* **Time range:** the dashboard time range does not apply to events; an issue, an event id or a trace already scopes the list.
+* **Bounds:** one issue reads at most 4 pages (1000 events); the fan-out reads one page of matching issues (state `all`, last seen first), keeps the first 10 and reads one page (250 events) of each. Each bound reached adds a warning notice, and a failing request fails the query. Results are cached for 15 seconds.
 * **Event list** for one issue (`issue` is required, `q` search): `id`, `event_id`, `timestamp`, `ingested_at`. The list is ordered by `digest_order` (arrival order), newest first by default; there is no sort by event `timestamp`. The UI keeps this order and shows the event `timestamp` in a column; it does not re-sort, because the API pages in arrival order.
 * **Lookup by SDK event id** (`events/lookup/?project=&event_id=`), for links that carry the Sentry event id.
-* **Search by trace:** Bugsink indexes `contexts.trace.trace_id` as the tag `trace`. `GET /issues/?q=trace:<id>` finds the issues holding events of one trace, with or without `project`; `GET /events/?issue=<id>&q=trace:<id>` finds the events within one issue. Events cannot be searched by trace across issues (`issue` is required). The reverse link, from a Tempo trace to its Bugsink events, therefore goes trace, issue, events. The events query type does this itself: given `trace:<id>` and no issue, it finds the issues and then their events, and returns one frame.
+* **Search by trace:** Bugsink indexes `contexts.trace.trace_id` as the tag `trace`. `GET /issues/?q=trace:<id>` finds the issues holding events of one trace, with or without `project`; `GET /events/?issue=<id>&q=trace:<id>` finds the events within one issue. Events cannot be searched by trace across issues (`issue` is required). The reverse link, from a Tempo trace to its Bugsink events, therefore goes trace, issue, events. The events query type does this itself: given `trace:<id>` and no issue, it finds the issues and then their events, and returns one frame. The fan-out groups rows by issue, last seen issue first, each issue's events newest first; it does not re-sort across issues.
 * **Event detail:** the full Sentry event payload (`data`). The plugin reads the exception, stack frames, breadcrumbs, tags, contexts (`trace_id`), environment and release from it. The Sentry event format is a stable public protocol.
 * **Stack trace display:** rendered from the structured frames in `data`. Bugsink's `stacktrace_md` is displayed as Markdown only as a fallback and is never parsed.
 
 ### D. App UI
 * **Issue list:**
   * Columns: Type (`calculated_type`), Message (`calculated_value`), Transaction, Project, Events (`digested_event_count`), First seen, Last seen, Status, Actions.
-  * An `Issue` column (`friendly_id`) carries the row link to Bugsink.
+  * An `Issue` column (`friendly_id`): in the app, the short id opens the issue detail page and an icon beside it opens the issue in Bugsink in a new tab; in dashboard frames the field links to Bugsink.
   * Filters: project, status (all, open, unresolved, resolved, muted), search text, time range. Sort: last seen, event count, and arrival order within one project. The filter bar is the data source's query editor; the page runs the data source's issues query.
   * 25 rows per page, paged in the browser. The page's state (data source, filters, sort, time range) lives in the URL; parameters the page does not own, such as `orgId` and `kiosk`, are kept as written.
   * The default instance is Grafana's default data source when it is a Bugsink one, else the first by name. Switching instance clears the project.
-  * Row link to the issue in Bugsink's own UI.
+  * The detail page's address carries the list's query string, and Back to issues returns to the list with it.
   * Event-count sparkline per row from `event-counts` (one call per visible row; see §6).
-* **Issue detail:** summary, event list, latest event shown by default.
+* **Issue detail:** a page at `issues/<id>` with a Back to issues button, an Open in Bugsink button and a Refresh button. Four reads run in parallel: the summary (type and message, status, project, transaction, event counts, first and last seen, unmute after and resolved by next release when set), Tags (the 5 values with the highest count per key and the number of other values; needs `events:read`), History (kind, time, author, comment) and Events (the issue's events, 25 per page, newest first). When the summary cannot be read, its message shows alone; otherwise each of the other three shows its own error under its heading. Failed reads raise no Grafana toast. Showing the latest event by default is left to M5.
 * **Event detail:**
   * Exception message and formatted stack trace (in-app frames emphasized, others collapsible).
   * Breadcrumb timeline.
@@ -219,6 +222,10 @@ Decided on 2026-11-15:
 | Open-issue count for alert rules | Page through the issue list and cache; ask Bugsink upstream for a count | §6 |
 | What the dashboard time range means for the issues query | Issues last seen within the range, both ends | §4.B |
 | Links to Bugsink when Grafana reaches it by an internal address | An optional Browser URL setting | §4.A |
+| What an issue row's short id opens in the app | The detail page; an icon beside it opens Bugsink. Dashboard frames keep their link to Bugsink | §4.D |
+| An events query that names nothing to read | An empty table with an info notice, not an error, so the provisioned trace dashboard opens clean | §4.C |
+| The dashboard time range for events | Not applied; an issue, an event id or a trace scopes the list | §4.C |
+| When the issue summary cannot be read | Its message shows alone and the other sections are not shown | §4.D |
 | How the App pages are built and get their data | Plain React with `@grafana/ui`; the issue list runs the data source's issues query | §3, §4.D |
 | Code generated from the PolyForm Shield schema, compiled into the GPL plugin | Shipped without asking for permission; the owner accepted the risk on 2026-11-15. The generated client is confined to one package (`pkg/bugsink/internal/gen`), so a hand-written client can replace it if Bugsink B.V. objects | §9 |
 

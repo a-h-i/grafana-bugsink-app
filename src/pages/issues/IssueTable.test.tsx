@@ -3,6 +3,7 @@ import React from 'react';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 
 import { IssueRow } from '../../datasource/types';
+import { MemoryRouter } from 'react-router-dom';
 import { IssueTable, PAGE_SIZE } from './IssueTable';
 
 function row(overrides: Partial<IssueRow> = {}): IssueRow {
@@ -23,9 +24,19 @@ function row(overrides: Partial<IssueRow> = {}): IssueRow {
   };
 }
 
+const issueHref = (r: IssueRow) => `/a/app/issues/${r.id}?ds=x`;
+
+function renderTable(rows: IssueRow[]) {
+  return render(
+    <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+      <IssueTable rows={rows} timeZone="utc" issueHref={issueHref} />
+    </MemoryRouter>
+  );
+}
+
 describe('IssueTable', () => {
   it('shows the columns in order without sort buttons', () => {
-    render(<IssueTable rows={[row()]} timeZone="utc" />);
+    renderTable([row()]);
 
     const headers = screen.getAllByRole('columnheader').map((h) => h.textContent);
     expect(headers).toEqual([
@@ -43,12 +54,15 @@ describe('IssueTable', () => {
   });
 
   it('renders the cells of a row', () => {
-    render(<IssueTable rows={[row()]} timeZone="utc" />);
+    renderTable([row()]);
 
-    const link = screen.getByRole('link', { name: /SAMPLE-PYTHON-2/ });
-    expect(link).toHaveAttribute('href', 'http://localhost:8800/issues/issue/a1/event/last/');
-    expect(link).toHaveAttribute('target', '_blank');
-    expect(link.getAttribute('rel')).toContain('noreferrer');
+    const link = screen.getByRole('link', { name: 'SAMPLE-PYTHON-2' });
+    expect(link).toHaveAttribute('href', '/a/app/issues/a1?ds=x');
+    expect(link).not.toHaveAttribute('target');
+    const external = screen.getByRole('link', { name: 'Open SAMPLE-PYTHON-2 in Bugsink' });
+    expect(external).toHaveAttribute('href', 'http://localhost:8800/issues/issue/a1/event/last/');
+    expect(external).toHaveAttribute('target', '_blank');
+    expect(external.getAttribute('rel')).toContain('noreferrer');
     for (const text of ['LookupError', 'no such key', '/checkout', 'sample-python', '22']) {
       expect(screen.getByText(text)).toBeInTheDocument();
     }
@@ -57,23 +71,22 @@ describe('IssueTable', () => {
   });
 
   it('labels each status', () => {
-    render(
-      <IssueTable
-        rows={[row({ id: '1', status: 'open' }), row({ id: '2', status: 'muted' }), row({ id: '3', status: 'resolved' })]}
-        timeZone="utc"
-      />
-    );
+    renderTable([
+      row({ id: '1', status: 'open' }),
+      row({ id: '2', status: 'muted' }),
+      row({ id: '3', status: 'resolved' }),
+    ]);
 
     for (const label of ['Open', 'Muted', 'Resolved']) {
       expect(screen.getByText(label)).toBeInTheDocument();
     }
   });
 
-  it('shows the friendly id as text when the row has no url', () => {
-    render(<IssueTable rows={[row({ url: undefined, message: '', transaction: '' })]} timeZone="utc" />);
+  it('shows only the detail link when the row has no url', () => {
+    renderTable([row({ url: undefined, message: '', transaction: '' })]);
 
-    expect(screen.getByText('SAMPLE-PYTHON-2')).toBeInTheDocument();
-    expect(screen.queryByRole('link')).not.toBeInTheDocument();
+    expect(screen.getAllByRole('link')).toHaveLength(1);
+    expect(screen.getByRole('link', { name: 'SAMPLE-PYTHON-2' })).toHaveAttribute('href', '/a/app/issues/a1?ds=x');
     const cells = screen.getAllByRole('cell');
     expect(cells[2]).toHaveTextContent('');
     expect(cells[3]).toHaveTextContent('');
@@ -81,7 +94,7 @@ describe('IssueTable', () => {
 
   it('pages 30 rows into 25 and 5', () => {
     const rows = Array.from({ length: 30 }, (_, i) => row({ id: `id${i}`, friendlyId: `SAMPLE-PYTHON-${i + 1}` }));
-    render(<IssueTable rows={rows} timeZone="utc" />);
+    renderTable(rows);
 
     expect(PAGE_SIZE).toBe(25);
     expect(screen.getAllByRole('row')).toHaveLength(PAGE_SIZE + 1);
@@ -95,7 +108,7 @@ describe('IssueTable', () => {
   });
 
   it('explains an empty result', () => {
-    render(<IssueTable rows={[]} timeZone="utc" />);
+    renderTable([]);
 
     expect(screen.getByText('No issues match these filters in this time range.')).toBeInTheDocument();
   });

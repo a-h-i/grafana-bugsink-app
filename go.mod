@@ -3,6 +3,7 @@ module github.com/a-h-i/grafana-bugsink-app
 go 1.26.5
 
 require (
+	github.com/google/uuid v1.6.0
 	github.com/grafana/grafana-plugin-sdk-go v0.299.0
 	github.com/oapi-codegen/runtime v1.9.0
 )
@@ -27,7 +28,6 @@ require (
 	github.com/golang/protobuf v1.5.4 // indirect
 	github.com/google/flatbuffers v25.12.19+incompatible // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
-	github.com/google/uuid v1.6.0 // indirect
 	github.com/grafana/otel-profiling-go v0.7.0 // indirect
 	github.com/grafana/pyroscope-go/godeltaprof v0.1.12 // indirect
 	github.com/grpc-ecosystem/go-grpc-middleware/providers/prometheus v1.1.1 // indirect
