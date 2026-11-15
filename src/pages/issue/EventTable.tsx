@@ -1,13 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import React from 'react';
-import { dateTimeFormat } from '@grafana/data';
 import { TimeZone } from '@grafana/schema';
 import { CellProps, Column, InteractiveTable, LinkButton, Stack, Text } from '@grafana/ui';
 import { Link } from 'react-router-dom';
 import { EventRow } from '../../datasource/types';
+import { formatTime } from '../format';
 import { PAGE_SIZE } from '../issues/IssueTable';
-
-const TIME_FORMAT = 'YYYY-MM-DD HH:mm:ss';
 
 interface EventTableProps {
   rows: EventRow[];
@@ -21,7 +19,7 @@ export function EventTable({ rows, timeZone, selectedId, eventHref }: EventTable
     return <p>No stored events.</p>;
   }
 
-  const time = (value: number) => dateTimeFormat(value, { timeZone, format: TIME_FORMAT });
+  const time = (value: number) => formatTime(value, timeZone);
   const columns: Array<Column<EventRow>> = [
     {
       id: 'eventId',

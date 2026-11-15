@@ -11,3 +11,7 @@ export const EVENT_MARKER = 'm2-e2e';
 export const CHAINED_MARKER = 'm5-chained';
 export const MESSAGE_MARKER = 'm5-message';
 export const JS_MARKER = 'm6-js';
+export const TRIAGE = 'b'.repeat(40);
+export const BUGSINK_API = 'http://localhost:8800/api/canonical/0';
+export const EDITOR = { user: 'm7-editor', password: 'm7-editor-e2e' };
+export const VIEWER = { user: 'm7-viewer', password: 'm7-viewer-e2e' };

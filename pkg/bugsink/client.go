@@ -31,7 +31,7 @@ type Client struct {
 	baseURL    string
 }
 
-// New builds a client for the Bugsink at baseURL using httpClient for transport.
+// New builds a client for the Bugsink at baseURL using httpClient for transport; it never follows a redirect.
 func New(baseURL, token string, httpClient *http.Client) (*Client, error) {
 	u, err := url.Parse(strings.TrimSpace(baseURL))
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
@@ -44,12 +44,14 @@ func New(baseURL, token string, httpClient *http.Client) (*Client, error) {
 	if httpClient == nil {
 		httpClient = http.DefaultClient
 	}
+	noRedirects := *httpClient
+	noRedirects.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 	u.RawQuery, u.Fragment = "", ""
 	u.Path = strings.TrimSuffix(strings.TrimSuffix(u.Path, "/"), apiPath)
 
 	c := &Client{authHeader: "Bearer " + token, baseURL: u.String()}
 	c.gen, err = gen.NewClient(u.String(),
-		gen.WithHTTPClient(httpClient),
+		gen.WithHTTPClient(&noRedirects),
 		gen.WithRequestEditorFn(func(_ context.Context, req *http.Request) error {
 			req.Header.Set("Authorization", c.authHeader)
 			return nil

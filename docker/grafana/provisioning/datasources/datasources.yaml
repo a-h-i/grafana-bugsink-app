@@ -35,3 +35,14 @@ datasources:
     secureJsonData:
       # Public development-only token from docker/bugsink/seed.py, bound to project 1.
       apiToken: cccccccccccccccccccccccccccccccccccccccc
+  - name: Bugsink triage
+    type: ahmedismail-bugsink-datasource
+    uid: bugsink-triage
+    access: proxy
+    url: http://bugsink:8000
+    jsonData:
+      browserUrl: http://localhost:8800
+      triageEnabled: true
+    secureJsonData:
+      # Public development-only token from docker/bugsink/seed.py, with issues:triage.
+      apiToken: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb

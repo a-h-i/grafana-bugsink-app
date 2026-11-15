@@ -54,6 +54,7 @@ test.describe('trace and log links', () => {
       await expect(cell).toBeVisible({ timeout: 3000 });
     }).toPass();
 
+    await expect(events.locator.getByRole('columnheader', { name: 'logs_query' })).toHaveCount(0);
     await cell.click();
     await expect(page.getByRole('link', { name: 'Open trace' })).toBeVisible();
     const logsLink = page.getByRole('link', { name: 'Open logs' });

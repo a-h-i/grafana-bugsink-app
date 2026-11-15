@@ -169,4 +169,28 @@ describe('IssuesQueryEditor', () => {
     await screen.findByRole('option', { name: 'Event count' });
     expect(screen.queryByRole('option', { name: 'Arrival order' })).not.toBeInTheDocument();
   });
+
+  describe('when the projects cannot be loaded', () => {
+    const rejected = () => Promise.reject({ data: { message: 'Bugsink rejected the API token.' } });
+
+    it('shows the message and still applies a state', async () => {
+      const { onChange } = await renderEditor({}, rejected);
+
+      expect(await screen.findByText('Bugsink rejected the API token.')).toBeInTheDocument();
+      await pick('State', 'Muted');
+
+      expect(lastCall(onChange).state).toBe('muted');
+    });
+
+    it('still applies the search text and runs on Enter', async () => {
+      const { onChange, onRunQuery } = await renderEditor({}, rejected);
+      const search = screen.getByRole('textbox', { name: 'Search' });
+
+      fireEvent.change(search, { target: { value: 'release:1.4.2' } });
+      fireEvent.keyDown(search, { key: 'Enter' });
+
+      expect(lastCall(onChange).q).toBe('release:1.4.2');
+      expect(onRunQuery).toHaveBeenCalledTimes(1);
+    });
+  });
 });

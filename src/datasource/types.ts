@@ -32,7 +32,11 @@ export interface BugsinkOptions extends DataSourceJsonData {
   linkWindowMinutes?: number;
   logsQuery?: string;
   serviceTag?: string;
+  triageEnabled?: boolean;
+  hideStacktraceText?: boolean;
 }
+
+export type TriageAction = 'resolve' | 'reopen' | 'mute' | 'unmute';
 
 export interface ExploreLink {
   title: string;

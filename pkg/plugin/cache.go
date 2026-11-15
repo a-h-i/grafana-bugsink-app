@@ -24,6 +24,7 @@ type cache[V any] struct {
 	ttl        time.Duration
 	maxEntries int
 	now        func() time.Time
+	gen        uint64
 }
 
 func newCache[V any](ttl time.Duration, maxEntries int) *cache[V] {
@@ -46,6 +47,29 @@ func (c *cache[V]) get(key string) (V, bool) {
 func (c *cache[V]) set(key string, value V) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	c.store(key, value)
+}
+
+// generation counts the calls to clear.
+func (c *cache[V]) generation() uint64 {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.gen
+}
+
+// setIfGeneration stores value like set only when clear has not run since gen was read, and reports whether it stored.
+func (c *cache[V]) setIfGeneration(key string, value V, gen uint64) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.gen != gen {
+		return false
+	}
+	c.store(key, value)
+	return true
+}
+
+// store is set without the lock.
+func (c *cache[V]) store(key string, value V) {
 	now := c.now()
 	for k, e := range c.entries {
 		if !now.Before(e.expires) {
@@ -68,4 +92,12 @@ func (c *cache[V]) dropOldest() {
 		}
 	}
 	delete(c.entries, oldestKey)
+}
+
+// clear drops every entry and starts a new generation.
+func (c *cache[V]) clear() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	clear(c.entries)
+	c.gen++
 }

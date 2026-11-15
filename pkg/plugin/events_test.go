@@ -350,8 +350,8 @@ func TestEventRowsCarryTraceIDs(t *testing.T) {
 	ids, page := traceIssues(2)
 	f.pages = []string{page}
 	f.eventPages = map[string][]string{
-		ids[0]: {eventAt(uuidN(101), uuidN(201), ids[0], olderThanRange)},
-		ids[1]: {eventAt(uuidN(103), uuidN(203), ids[1], olderThanRange)},
+		ids[0]:           {eventAt(uuidN(101), uuidN(201), ids[0], olderThanRange)},
+		ids[1]:           {eventAt(uuidN(103), uuidN(203), ids[1], olderThanRange)},
 		defaultIssueUUID: {eventAt(uuidN(104), uuidN(204), defaultIssueUUID, olderThanRange)},
 	}
 	ds := f.datasource(t)

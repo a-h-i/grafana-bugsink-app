@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -276,5 +277,106 @@ func TestLinkSettingsInHealthCheck(t *testing.T) {
 	set := newInstance(t, srv.URL, secretToken, `{"lokiDatasourceUid":"loki","tempoDatasourceUid":"tempo"}`)
 	if set.links.lokiUID != "loki" || set.links.tempoUID != "tempo" {
 		t.Fatalf("links = %+v", set.links)
+	}
+}
+
+func TestSwitches(t *testing.T) {
+	tests := []struct {
+		name, jsonData string
+		triage, hide   bool
+	}{
+		{"absent", `{"browserUrl":"http://b"}`, false, false},
+		{"no jsonData", "", false, false},
+		{"triage on", `{"triageEnabled":true}`, true, false},
+		{"triage false", `{"triageEnabled":false}`, false, false},
+		{"triage null", `{"triageEnabled":null}`, false, false},
+		{"hide on", `{"hideStacktraceText":true}`, false, true},
+		{"both on", `{"triageEnabled":true,"hideStacktraceText":true}`, true, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ds := newInstance(t, "http://bugsink.example", secretToken, tt.jsonData)
+			if ds.settingsErr != "" {
+				t.Fatalf("settingsErr = %q", ds.settingsErr)
+			}
+			if ds.triageEnabled != tt.triage || ds.hideStacktraceText != tt.hide {
+				t.Fatalf("triageEnabled %v hideStacktraceText %v, want %v %v", ds.triageEnabled, ds.hideStacktraceText, tt.triage, tt.hide)
+			}
+		})
+	}
+}
+
+func TestSwitchesOfTheWrongType(t *testing.T) {
+	for _, jsonData := range []string{
+		`{"triageEnabled":"yes"}`, `{"triageEnabled":"true"}`, `{"triageEnabled":1}`, `{"triageEnabled":{}}`,
+		`{"hideStacktraceText":"yes"}`, `{"hideStacktraceText":1}`, `{"hideStacktraceText":[true]}`,
+	} {
+		t.Run(jsonData, func(t *testing.T) {
+			ds := newInstance(t, "http://bugsink.example", secretToken, jsonData)
+			if res := check(t, ds); res.Status != backend.HealthStatusError || res.Message != "The data source settings are invalid." {
+				t.Fatalf("got %v %q", res.Status, res.Message)
+			}
+			if ds.client != nil || ds.triageEnabled || ds.hideStacktraceText {
+				t.Fatalf("client set %v, triageEnabled %v, hideStacktraceText %v", ds.client != nil, ds.triageEnabled, ds.hideStacktraceText)
+			}
+		})
+	}
+}
+
+// triageServer answers like bugsinkHandler and records every POST; triage answers the POSTs.
+func triageServer(t *testing.T, triage http.HandlerFunc) (*httptest.Server, *[]string) {
+	t.Helper()
+	var mu sync.Mutex
+	var posts []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			bugsinkHandler(w, r)
+			return
+		}
+		mu.Lock()
+		posts = append(posts, r.URL.Path)
+		mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		triage(w, r)
+	}))
+	t.Cleanup(srv.Close)
+	return srv, &posts
+}
+
+func TestCheckHealthTriageEndToEnd(t *testing.T) {
+	absent := func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = fmt.Fprint(w, `{"detail":"No Issue matches the given query."}`)
+	}
+	lacking := func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = fmt.Fprint(w, `{"detail":"This token does not have the required capability: issues:triage."}`)
+	}
+	connected := "Connected to Bugsink. Projects visible to this token: sample-python, sample-js."
+	probePath := "/api/canonical/0/issues/" + absentIssueID + "/resolve/"
+	tests := []struct {
+		name, jsonData string
+		triage         http.HandlerFunc
+		status         backend.HealthStatus
+		message        string
+		posts          []string
+	}{
+		{"off", "", absent, backend.HealthStatusOk, connected, nil},
+		{"off explicitly", `{"triageEnabled":false}`, absent, backend.HealthStatusOk, connected, nil},
+		{"on, token can triage", `{"triageEnabled":true}`, absent, backend.HealthStatusOk, connected + " The token can triage issues.", []string{probePath}},
+		{"on, token cannot triage", `{"triageEnabled":true}`, lacking, backend.HealthStatusError, "The API token lacks: issues:triage.", []string{probePath}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			srv, posts := triageServer(t, tt.triage)
+			res := check(t, newInstance(t, srv.URL, secretToken, tt.jsonData))
+			if res.Status != tt.status || res.Message != tt.message {
+				t.Fatalf("got %v %q\nwant %v %q", res.Status, res.Message, tt.status, tt.message)
+			}
+			if fmt.Sprint(*posts) != fmt.Sprint(tt.posts) {
+				t.Fatalf("POSTs = %v, want %v", *posts, tt.posts)
+			}
+			assertNoToken(t, res)
+		})
 	}
 }

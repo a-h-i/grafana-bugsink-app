@@ -122,6 +122,10 @@ and a token holding `debug-files:upload` plus `issues:read` both got `200 {"vers
 So `auth.scopes` was the same fixed list for both tokens and does not list the token's capabilities. Otherwise a client learns a
 capability only by calling an operation that needs it and reading the refusal. Not tried: any endpoint outside the pinned schema.
 
+Triage on Bugsink 2.6.3 (M7, hand-run): a triage POST on the all-zeros issue id is 404 with the triage token and 403 naming
+`issues:triage` with the read, project-bound and no-capability tokens. Bugsink checks the capability before it looks up the issue,
+which the plugin's health check relies on to probe `issues:triage` without a side effect.
+
 ## Q5. What does a project-bound token get from each endpoint the plugin uses?
 
 **Everything inside its project, nothing outside it, and it can list projects, getting only its own.** The

@@ -19,17 +19,19 @@ import (
 
 // Datasource is one Bugsink data source instance.
 type Datasource struct {
-	client        *bugsink.Client // nil when settingsErr is set
-	httpClient    *http.Client
-	settingsErr   string // the health check's message for invalid settings, or empty
-	url           string // the Bugsink URL as entered, for messages
-	browserURL    string // base of links to Bugsink's pages, no trailing slash
-	links         linkSettings
-	healthTimeout time.Duration
-	issueCache    *cache[bugsink.IssueList]
-	projectCache  *cache[projectsResult]
-	eventCache    *cache[eventsResult]
-	resources     backend.CallResourceHandler
+	client             *bugsink.Client // nil when settingsErr is set
+	httpClient         *http.Client
+	settingsErr        string // the health check's message for invalid settings, or empty
+	url                string // the Bugsink URL as entered, for messages
+	browserURL         string // base of links to Bugsink's pages, no trailing slash
+	links              linkSettings
+	triageEnabled      bool
+	hideStacktraceText bool
+	healthTimeout      time.Duration
+	issueCache         *cache[bugsink.IssueList]
+	projectCache       *cache[projectsResult]
+	eventCache         *cache[eventsResult]
+	resources          backend.CallResourceHandler
 }
 
 var (
@@ -84,7 +86,9 @@ func (d *Datasource) configure(ctx context.Context, s backend.DataSourceInstance
 		return msgSettingsInvalid
 	}
 	var jsonData struct {
-		BrowserURL string `json:"browserUrl"`
+		BrowserURL         string `json:"browserUrl"`
+		TriageEnabled      bool   `json:"triageEnabled"`
+		HideStacktraceText bool   `json:"hideStacktraceText"`
 	}
 	if len(s.JSONData) > 0 && json.Unmarshal(s.JSONData, &jsonData) != nil {
 		return msgSettingsInvalid
@@ -105,6 +109,8 @@ func (d *Datasource) configure(ctx context.Context, s backend.DataSourceInstance
 	}
 	d.browserURL = strings.TrimRight(browserURL, "/")
 	d.links = links
+	d.triageEnabled = jsonData.TriageEnabled
+	d.hideStacktraceText = jsonData.HideStacktraceText
 	d.client = client
 	return ""
 }
@@ -123,5 +129,5 @@ func (d *Datasource) CheckHealth(ctx context.Context, _ *backend.CheckHealthRequ
 	}
 	ctx, cancel := context.WithTimeout(ctx, d.healthTimeout)
 	defer cancel()
-	return checkHealth(ctx, d.url, d.healthTimeout, d.client), nil
+	return checkHealth(ctx, d.url, d.healthTimeout, d.client, d.triageEnabled), nil
 }

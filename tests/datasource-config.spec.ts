@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import { expect, test } from '@grafana/plugin-e2e';
-import { BUGSINK_URL, GLOBAL_READ, NO_CAPS, PROJECT_READ } from './seeded';
+import { BUGSINK_URL, GLOBAL_READ, NO_CAPS, PROJECT_READ, TRIAGE } from './seeded';
 
 const TYPE = 'ahmedismail-bugsink-datasource';
 
@@ -90,6 +90,20 @@ test.describe('connecting a Bugsink data source', () => {
     await expect(configPage).toHaveAlert('error', {
       hasText: 'The link time window must be a whole number of minutes from 1 to 1440.',
     });
+  });
+
+  test('triage on, token without issues:triage', async ({ createDataSourceConfigPage, page }) => {
+    const configPage = await saveAndTest(createDataSourceConfigPage, page, BUGSINK_URL, GLOBAL_READ);
+    await page.getByRole('switch', { name: /Triage/i }).check({ force: true });
+    await expect(configPage.saveAndTest()).not.toBeOK();
+    await expect(configPage).toHaveAlert('error', { hasText: 'The API token lacks: issues:triage.' });
+  });
+
+  test('triage on with the triage token', async ({ createDataSourceConfigPage, page }) => {
+    const configPage = await saveAndTest(createDataSourceConfigPage, page, BUGSINK_URL, TRIAGE);
+    await page.getByRole('switch', { name: /Triage/i }).check({ force: true });
+    await expect(configPage.saveAndTest()).toBeOK();
+    await expect(configPage).toHaveAlert('success', { hasText: 'The token can triage issues.' });
   });
 
   test('provisioned data source', async ({ gotoDataSourceConfigPage, page }) => {

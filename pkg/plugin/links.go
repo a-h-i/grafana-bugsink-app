@@ -77,9 +77,9 @@ func parseLinkSettings(jsonData json.RawMessage) (s linkSettings, invalid string
 // traceIDPattern is the form of a trace id that gets Tempo and Loki links.
 var traceIDPattern = regexp.MustCompile(`^[0-9a-f]{32}$`)
 
-var logsVarPattern = regexp.MustCompile(`\$\{([^}]*)\}`)
+var logsVarPattern = regexp.MustCompile(`\$\{([^}\n]*)\}`)
 
-// variablesQuoted reports whether every substituted variable of the template sits inside a closed double-quoted string.
+// variablesQuoted reports whether every substituted variable of the template sits inside a closed double-quoted string and outside comments; a newline ends a double-quoted string.
 func variablesQuoted(template string) bool {
 	inQuote, inRaw, open := false, false, 0
 	for i := 0; i < len(template); i++ {
@@ -91,21 +91,23 @@ func variablesQuoted(template string) bool {
 			i++
 		case inQuote && c == '"':
 			inQuote, open = false, 0
+		case inQuote && c == '\n':
+			if open > 0 {
+				return false
+			}
+			inQuote = false
 		case !inQuote && !inRaw && c == '"':
 			inQuote = true
 		case !inQuote && c == '`':
 			inRaw = !inRaw
-		case !inQuote && !inRaw && c == '#':
-			end := strings.IndexByte(template[i:], '\n')
-			if end < 0 {
-				end = len(template) - i
-			}
-			for _, m := range logsVarPattern.FindAllStringSubmatch(template[i:i+end], -1) {
+		case !inQuote && !inRaw && (c == '#' || c == '/'):
+			n := commentLen(template[i:])
+			for _, m := range logsVarPattern.FindAllStringSubmatch(template[i:i+n], -1) {
 				if isSubstituted(m[1]) {
 					return false
 				}
 			}
-			i += end
+			i += max(n-1, 0)
 		case c == '$':
 			if n := substitutedLen(template[i:]); n > 0 {
 				if !inQuote {
@@ -117,6 +119,23 @@ func variablesQuoted(template string) bool {
 		}
 	}
 	return open == 0
+}
+
+// commentLen is the length of the #, // or /* */ comment at the start of s (an unclosed /* runs to the end), or 0 when s starts none.
+func commentLen(s string) int {
+	switch {
+	case strings.HasPrefix(s, "#"), strings.HasPrefix(s, "//"):
+		if n := strings.IndexByte(s, '\n'); n >= 0 {
+			return n
+		}
+	case strings.HasPrefix(s, "/*"):
+		if n := strings.Index(s[2:], "*/"); n >= 0 {
+			return n + 4
+		}
+	default:
+		return 0
+	}
+	return len(s)
 }
 
 // substitutedLen is the length of the substituted variable at the start of s, or 0 when there is none.

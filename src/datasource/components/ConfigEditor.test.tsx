@@ -220,4 +220,66 @@ describe('ConfigEditor', () => {
       expect(lastCall(onOptionsChange).jsonData).toEqual({ logsQuery: '{a="b"}', serviceTag: '' });
     });
   });
+
+  describe('switches', () => {
+    it.each([
+      [
+        'Triage',
+        'triageEnabled',
+        "Let editors and admins resolve, reopen, mute and unmute issues from Grafana. The API token needs issues:triage. Every action runs as the token's Bugsink user. If anonymous users have the Editor or Admin role, anyone who can open Grafana can triage.",
+      ],
+      [
+        'Hide stack trace text',
+        'hideStacktraceText',
+        "Do not show Bugsink's own stack trace text, which can include local variables, for events without structured frames.",
+      ],
+    ] as const)('%s renders off, explains itself and stores a boolean', (label, key, description) => {
+      const onOptionsChange = renderEditor({ jsonData: { browserUrl: 'x' } });
+      const toggle = screen.getByLabelText(label);
+
+      expect(toggle).not.toBeChecked();
+      expect(screen.getByText(description)).toBeInTheDocument();
+
+      fireEvent.click(toggle);
+
+      expect(lastCall(onOptionsChange).jsonData).toEqual({ browserUrl: 'x', [key]: true });
+    });
+
+    it('shows a stored switch as on', () => {
+      renderEditor({ jsonData: { triageEnabled: true } });
+
+      expect(screen.getByLabelText('Triage')).toBeChecked();
+      expect(screen.getByLabelText('Hide stack trace text')).not.toBeChecked();
+    });
+
+    it.each(['Triage', 'Hide stack trace text'])(
+      'switching %s off stores false and keeps the other options',
+      (label) => {
+        const onOptionsChange = renderEditor({
+          jsonData: { browserUrl: 'x', triageEnabled: true, hideStacktraceText: true },
+        });
+
+        fireEvent.click(screen.getByLabelText(label));
+
+        const key = label === 'Triage' ? 'triageEnabled' : 'hideStacktraceText';
+        expect(lastCall(onOptionsChange).jsonData).toEqual({
+          browserUrl: 'x',
+          triageEnabled: true,
+          hideStacktraceText: true,
+          [key]: false,
+        });
+      }
+    );
+
+    it('puts each switch under its own heading', () => {
+      renderEditor();
+
+      const triage = screen.getByRole('heading', { level: 3, name: 'Triage' });
+      const privacy = screen.getByRole('heading', { level: 3, name: 'Privacy' });
+      const follows = (a: Node, b: Node) => (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
+      expect(follows(triage, screen.getByLabelText('Triage'))).toBe(true);
+      expect(follows(screen.getByLabelText('Triage'), privacy)).toBe(true);
+      expect(follows(privacy, screen.getByLabelText('Hide stack trace text'))).toBe(true);
+    });
+  });
 });

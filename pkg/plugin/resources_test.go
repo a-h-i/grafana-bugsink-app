@@ -20,8 +20,9 @@ import (
 )
 
 type resourceReply struct {
-	status int
-	body   string
+	status  int
+	body    string
+	headers map[string][]string
 }
 
 type collectingSender struct {
@@ -30,7 +31,7 @@ type collectingSender struct {
 }
 
 func (c *collectingSender) Send(r *backend.CallResourceResponse) error {
-	c.reply = &resourceReply{status: r.Status, body: string(r.Body)}
+	c.reply = &resourceReply{status: r.Status, body: string(r.Body), headers: r.Headers}
 	if v := r.Headers["Allow"]; len(v) > 0 {
 		c.allow = v[0]
 	}
@@ -658,5 +659,81 @@ func TestEventResourceMalformedTraceIDHasNoLinks(t *testing.T) {
 		if got := eventLinksWithTrace(t, "python-unhandled", both, id); !reflect.DeepEqual(got, []any{}) {
 			t.Errorf("trace id %q: links %#v, want []", id, got)
 		}
+	}
+}
+
+func TestEventHidesStacktraceText(t *testing.T) {
+	const hidden = "Bugsink's stack trace text is hidden for this data source."
+	var getBody func(t *testing.T, id, body, jsonData string) (string, map[string]any)
+	get := func(t *testing.T, fixture, jsonData string) (string, map[string]any) {
+		t.Helper()
+		id, body := eventFixture(t, fixture)
+		return getBody(t, id, body, jsonData)
+	}
+	getBody = func(t *testing.T, id, body, jsonData string) (string, map[string]any) {
+		t.Helper()
+		f := newFakeBugsink(t)
+		f.eventDetails = map[string]string{id: body}
+		r := callResource(t, newInstance(t, f.srv.URL, secretToken, jsonData), "GET", "events/"+id)
+		if r.status != 200 {
+			t.Fatalf("status %d body %s", r.status, r.body)
+		}
+		var got map[string]any
+		if err := json.Unmarshal([]byte(r.body), &got); err != nil {
+			t.Fatal(err)
+		}
+		return r.body, got
+	}
+	const on, off = `{"hideStacktraceText":true}`, `{"hideStacktraceText":false}`
+	const text = "produce.py:17"
+
+	t.Run("on, text and no frames", func(t *testing.T) {
+		raw, body := get(t, "python-message-threads", on)
+		if v, ok := body["stacktraceMd"]; !ok || v != nil {
+			t.Errorf("stacktraceMd = %v (present %v)", v, ok)
+		}
+		if strings.Contains(raw, text) {
+			t.Errorf("body carries the stack trace text: %.300s", raw)
+		}
+		if notices := fmt.Sprint(body["notices"]); notices != "["+hidden+"]" {
+			t.Errorf("notices = %s", notices)
+		}
+	})
+	t.Run("on, text over the limit", func(t *testing.T) {
+		id, body := eventFixture(t, "python-message-threads")
+		var doc map[string]any
+		if err := json.Unmarshal([]byte(body), &doc); err != nil {
+			t.Fatal(err)
+		}
+		doc["stacktrace_md"] = text + strings.Repeat("x", bugsink.MaxStacktraceMD)
+		long, err := json.Marshal(doc)
+		if err != nil {
+			t.Fatal(err)
+		}
+		raw, got := getBody(t, id, string(long), on)
+		if got["stacktraceMd"] != nil || strings.Contains(raw, text) || fmt.Sprint(got["notices"]) != "["+hidden+"]" {
+			t.Errorf("stacktraceMd %.40v notices %v", got["stacktraceMd"], got["notices"])
+		}
+	})
+	t.Run("on, no text", func(t *testing.T) {
+		_, body := get(t, "python-unhandled", on)
+		if notices, ok := body["notices"].([]any); !ok || len(notices) != 0 {
+			t.Errorf("notices = %v", body["notices"])
+		}
+		if len(body["exceptions"].([]any)) == 0 {
+			t.Error("frames were dropped")
+		}
+	})
+	for name, jsonData := range map[string]string{"off": off, "absent": ""} {
+		t.Run(name+", text shown", func(t *testing.T) {
+			raw, body := get(t, "python-message-threads", jsonData)
+			md, ok := body["stacktraceMd"].(string)
+			if !ok || !strings.Contains(md, text) || !strings.Contains(raw, text) {
+				t.Errorf("stacktraceMd = %v", body["stacktraceMd"])
+			}
+			if notices, ok := body["notices"].([]any); !ok || len(notices) != 0 {
+				t.Errorf("notices = %v", body["notices"])
+			}
+		})
 	}
 }

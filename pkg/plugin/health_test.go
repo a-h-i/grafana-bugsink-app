@@ -17,7 +17,9 @@ type fakeProber struct {
 	projectsErr error
 	issueErr    error
 	eventsErr   error
+	triageErr   error
 	ran         []string
+	triaged     []string
 }
 
 func (f *fakeProber) ListProjects(context.Context) ([]bugsink.Project, error) {
@@ -33,6 +35,12 @@ func (f *fakeProber) GetIssue(_ context.Context, id string) (bugsink.Issue, erro
 func (f *fakeProber) ListEventsWithoutIssue(context.Context) error {
 	f.ran = append(f.ran, "events")
 	return f.eventsErr
+}
+
+func (f *fakeProber) Triage(_ context.Context, id string, action bugsink.TriageAction) (bugsink.Issue, error) {
+	f.ran = append(f.ran, "triage")
+	f.triaged = append(f.triaged, id+" "+string(action))
+	return bugsink.Issue{}, f.triageErr
 }
 
 func apiErr(status int, c bugsink.Capability) error {
@@ -112,12 +120,70 @@ func TestCheckHealthMessages(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), defaultHealthTimeout)
 			defer cancel()
-			res := checkHealth(ctx, testURL, defaultHealthTimeout, tt.f)
+			res := checkHealth(ctx, testURL, defaultHealthTimeout, tt.f, false)
 			if res.Status != tt.status || res.Message != tt.message {
 				t.Fatalf("got %v %q\nwant %v %q", res.Status, res.Message, tt.status, tt.message)
 			}
 			if tt.ran != nil && fmt.Sprint(tt.f.ran) != fmt.Sprint(tt.ran) {
 				t.Fatalf("probes run = %v, want %v", tt.f.ran, tt.ran)
+			}
+		})
+	}
+}
+
+func TestCheckHealthTriageOffNeverTriages(t *testing.T) {
+	for _, f := range []*fakeProber{
+		{projects: named("a"), issueErr: apiErr(404, ""), eventsErr: apiErr(400, "")},
+		{projects: named("a"), issueErr: apiErr(404, ""), eventsErr: apiErr(403, bugsink.EventsRead)},
+		{projectsErr: apiErr(401, "")},
+	} {
+		checkHealth(context.Background(), testURL, defaultHealthTimeout, f, false)
+		if len(f.triaged) != 0 {
+			t.Fatalf("Triage called with %v while triage is off", f.triaged)
+		}
+	}
+}
+
+func TestCheckHealthTriage(t *testing.T) {
+	has404, has400 := apiErr(404, ""), apiErr(400, "")
+	connected := "Connected to Bugsink. Projects visible to this token: a."
+	tests := []struct {
+		name    string
+		f       *fakeProber
+		status  backend.HealthStatus
+		message string
+		triaged []string
+	}{
+		{"token can triage", &fakeProber{projects: named("a"), issueErr: has404, eventsErr: has400, triageErr: has404},
+			backend.HealthStatusOk, connected + " The token can triage issues.", []string{absentIssueID + " resolve"}},
+		{"token lacks issues:triage", &fakeProber{projects: named("a"), issueErr: has404, eventsErr: has400, triageErr: apiErr(403, bugsink.IssuesTriage)},
+			backend.HealthStatusError, "The API token lacks: issues:triage.", []string{absentIssueID + " resolve"}},
+		{"token lacks events:read and issues:triage", &fakeProber{projects: named("a"), issueErr: has404, eventsErr: apiErr(403, bugsink.EventsRead), triageErr: apiErr(403, bugsink.IssuesTriage)},
+			backend.HealthStatusError, "The API token lacks: events:read, issues:triage.", []string{absentIssueID + " resolve"}},
+		{"200 cannot tell", &fakeProber{projects: named("a"), issueErr: has404, eventsErr: has400},
+			backend.HealthStatusError, "Bugsink answered HTTP 200 to a check for issues:triage.", []string{absentIssueID + " resolve"}},
+		{"200 without Bugsink JSON cannot tell", &fakeProber{projects: named("a"), issueErr: has404, eventsErr: has400, triageErr: fmt.Errorf("%w: %w", bugsink.ErrNotBugsink, apiErr(200, ""))},
+			backend.HealthStatusError, "Bugsink answered HTTP 200 to a check for issues:triage.", []string{absentIssueID + " resolve"}},
+		{"405 cannot tell", &fakeProber{projects: named("a"), issueErr: has404, eventsErr: has400, triageErr: apiErr(405, "")},
+			backend.HealthStatusError, "Bugsink answered HTTP 405 to a check for issues:triage.", []string{absentIssueID + " resolve"}},
+		{"403 without a capability cannot tell", &fakeProber{projects: named("a"), issueErr: has404, eventsErr: has400, triageErr: apiErr(403, "")},
+			backend.HealthStatusError, "Bugsink answered HTTP 403 to a check for issues:triage.", []string{absentIssueID + " resolve"}},
+		{"401 on the first probe", &fakeProber{projectsErr: apiErr(401, "")},
+			backend.HealthStatusError, "Bugsink rejected the API token. Check that it was copied in full and has not been deleted.", []string{}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(context.Background(), defaultHealthTimeout)
+			defer cancel()
+			res := checkHealth(ctx, testURL, defaultHealthTimeout, tt.f, true)
+			if res.Status != tt.status || res.Message != tt.message {
+				t.Fatalf("got %v %q\nwant %v %q", res.Status, res.Message, tt.status, tt.message)
+			}
+			if tt.triaged != nil && fmt.Sprint(tt.f.triaged) != fmt.Sprint(tt.triaged) {
+				t.Fatalf("triaged = %v, want %v", tt.f.triaged, tt.triaged)
+			}
+			if len(tt.f.triaged) > 1 {
+				t.Fatalf("Triage called %d times", len(tt.f.triaged))
 			}
 		})
 	}

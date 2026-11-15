@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -634,5 +635,84 @@ func TestEventsQueryLinks(t *testing.T) {
 	}
 	if want := olderThanRange.Add(-15 * time.Minute); !links[0].Internal.Range.From.Equal(want) {
 		t.Fatalf("range from %v, want %v", links[0].Internal.Range.From, want)
+	}
+}
+
+// seenRequest is one request a recordingServer received.
+type seenRequest struct {
+	method, path, rawQuery, body string
+}
+
+// recordingServer records every request, then lets next answer it.
+type recordingServer struct {
+	mu   sync.Mutex
+	seen []seenRequest
+	srv  *httptest.Server
+}
+
+func newRecordingServer(t *testing.T, next http.HandlerFunc) *recordingServer {
+	t.Helper()
+	rs := &recordingServer{}
+	rs.srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		rs.mu.Lock()
+		rs.seen = append(rs.seen, seenRequest{method: r.Method, path: r.URL.Path, rawQuery: r.URL.RawQuery, body: string(body)})
+		rs.mu.Unlock()
+		next(w, r)
+	}))
+	t.Cleanup(rs.srv.Close)
+	return rs
+}
+
+func (rs *recordingServer) requests() []seenRequest {
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	return append([]seenRequest(nil), rs.seen...)
+}
+
+func TestQueryNeverWrites(t *testing.T) {
+	f := newFakeBugsink(t)
+	f.pages = []string{inRange("X-1")}
+	rs := newRecordingServer(t, f.serve)
+	ds := newInstance(t, rs.srv.URL, secretToken, `{"browserUrl":"http://b","triageEnabled":true}`)
+	for _, q := range []struct {
+		name, queryType, model, message string
+	}{
+		{"resolve in the model", "", `{"queryType":"resolve","issue":"X-1"}`, `Unknown queryType "resolve".`},
+		{"triage in the model", "", `{"queryType":"triage","issue":"X-1"}`, `Unknown queryType "triage".`},
+		{"resolve as the query type", "resolve", `{"issue":"X-1"}`, `Unknown queryType "resolve".`},
+		{"triage as the query type", "triage", `{"issue":"X-1"}`, `Unknown queryType "triage".`},
+		{"issues", "", `{"queryType":"issues"}`, ""},
+		{"events", "", `{"queryType":"events","issue":"X-1"}`, ""},
+	} {
+		t.Run(q.name, func(t *testing.T) {
+			req := &backend.QueryDataRequest{Queries: []backend.DataQuery{{
+				RefID: "A", QueryType: q.queryType, JSON: json.RawMessage(q.model),
+				TimeRange: backend.TimeRange{From: rangeFrom, To: rangeTo},
+			}}}
+			resp, err := ds.QueryData(context.Background(), req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			r := resp.Responses["A"]
+			if q.message == "" {
+				if r.Error != nil {
+					t.Fatalf("error %v", r.Error)
+				}
+				return
+			}
+			if r.Error == nil || r.Error.Error() != q.message || r.Status != backend.StatusBadRequest {
+				t.Fatalf("got %v status %d, want %q 400", r.Error, r.Status, q.message)
+			}
+		})
+	}
+	seen := rs.requests()
+	if len(seen) == 0 {
+		t.Fatal("no Bugsink requests at all; the issues and events queries should read")
+	}
+	for _, s := range seen {
+		if s.method != http.MethodGet {
+			t.Fatalf("Bugsink saw %s %s", s.method, s.path)
+		}
 	}
 }

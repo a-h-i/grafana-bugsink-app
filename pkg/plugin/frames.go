@@ -124,7 +124,7 @@ func eventsFrame(rows []eventRow, projectNames map[int]string, browserURL string
 		traceField.Config.Links = links.exploreLinks("${__value.raw}", "${__data.fields.logs_query}", from.Add(-links.window), to.Add(links.window))
 	}
 	logsField := field("logs_query", "", orEmpty(logsQuery))
-	logsField.Config.Custom = map[string]any{"hidden": true}
+	logsField.Config.Custom = map[string]any{"hidden": true, "hideFrom": map[string]any{"viz": true, "legend": true, "tooltip": true}}
 	frame := data.NewFrame("events",
 		field("timestamp", "Timestamp", orEmpty(timestamp)),
 		eventIDField,

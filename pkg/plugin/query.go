@@ -164,17 +164,18 @@ func parseProject(raw json.RawMessage) (int, error) {
 	return strconv.Atoi(string(raw))
 }
 
-// issueList returns the issues for the filter, from the cache when its list reaches back to from.
+// issueList returns the issues for the filter, from the cache when its list reaches back to from; a list read across a clear is not stored.
 func (d *Datasource) issueList(ctx context.Context, f bugsink.IssueFilter, from time.Time) (bugsink.IssueList, error) {
 	if cached, ok := d.issueCache.get(filterKey(f)); ok && (cached.SeenSince.IsZero() || !cached.SeenSince.After(from)) {
 		return cached, nil
 	}
+	gen := d.issueCache.generation()
 	list, err := d.client.ListIssues(ctx, f, from)
 	if err != nil {
 		return bugsink.IssueList{}, err
 	}
 	if !list.Truncated {
-		d.issueCache.set(filterKey(f), list)
+		d.issueCache.setIfGeneration(filterKey(f), list, gen)
 	}
 	return list, nil
 }

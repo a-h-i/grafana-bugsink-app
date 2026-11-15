@@ -1,16 +1,15 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import React from 'react';
 import { css } from '@emotion/css';
-import { dateTimeFormat, GrafanaTheme2 } from '@grafana/data';
+import { GrafanaTheme2 } from '@grafana/data';
 import { TimeZone } from '@grafana/schema';
 import { Alert, Column, InteractiveTable, LinkButton, Stack, Text, useStyles2 } from '@grafana/ui';
 import { exploreHref } from '../../datasource/links';
 import { EventDetail, KeyValue } from '../../datasource/types';
+import { formatTime } from '../format';
 import { PAGE_SIZE } from '../issues/IssueTable';
 import { Breadcrumbs } from './Breadcrumbs';
 import { ExceptionChain } from './StackTrace';
-
-const TIME_FORMAT = 'YYYY-MM-DD HH:mm:ss';
 
 interface ContextRow {
   context: string;
@@ -60,7 +59,7 @@ export function EventDetailView({ event, timeZone }: { event: EventDetail; timeZ
   const styles = useStyles2(getStyles);
   const rows: Array<[string, string]> = [
     ['Event ID', event.eventId],
-    ['Timestamp', dateTimeFormat(event.timestamp, { timeZone, format: TIME_FORMAT })],
+    ['Timestamp', formatTime(event.timestamp, timeZone)],
     ['Level', event.level],
     ['Environment', event.environment],
     ['Release', event.release],

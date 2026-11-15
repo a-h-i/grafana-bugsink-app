@@ -13,8 +13,18 @@ type MockSource = {
   getIssueHistory: jest.Mock;
   listEvents: jest.Mock;
   getEvent: jest.Mock;
+  canTriage: jest.Mock;
+  triage: jest.Mock;
 };
 const mockSources: Record<string, MockSource> = {};
+
+// Grafana's Icon keeps a spinner in jsdom once shown, so the stand-in exposes the loading state instead.
+jest.mock('@grafana/ui', () => ({
+  ...jest.requireActual('@grafana/ui'),
+  RefreshPicker: ({ isLoading, onRefresh }: { isLoading?: boolean; onRefresh?: () => void }) => (
+    <button data-testid="data-testid RefreshPicker run button" aria-busy={isLoading} onClick={onRefresh} />
+  ),
+}));
 
 jest.mock('@grafana/runtime', () => ({
   config: { bootData: { user: { timezone: 'utc' } } },
@@ -132,6 +142,8 @@ function newSource(): MockSource {
     getIssueHistory: jest.fn().mockResolvedValue(HISTORY),
     listEvents: jest.fn().mockResolvedValue({ rows: [EVENT], notices: [] }),
     getEvent: jest.fn((id: string) => Promise.resolve(eventDetail(id))),
+    canTriage: jest.fn(() => true),
+    triage: jest.fn(),
   };
 }
 
@@ -184,6 +196,15 @@ describe('IssuePage', () => {
     );
   });
 
+  it('goes back to the list without a query string', async () => {
+    renderPage('/a/ahmedismail-bugsink-app/issues/SAMPLE-PYTHON-2');
+    await screen.findByText('LookupError: failure');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Back to issues' }));
+
+    expect(screen.getByTestId('location')).toHaveTextContent(/^\/a\/ahmedismail-bugsink-app$/);
+  });
+
   it('shows a placeholder while the issue is pending', async () => {
     mockSources.bugsink.getIssue.mockReturnValue(new Promise(() => {}));
 
@@ -211,6 +232,7 @@ describe('IssuePage', () => {
     const link = await screen.findByRole('link', { name: 'Open in Bugsink' });
     expect(link).toHaveAttribute('href', ISSUE.bugsinkUrl);
     expect(link).toHaveAttribute('target', '_blank');
+    expect(link).toHaveAttribute('rel', 'noreferrer');
   });
 
   it('refresh reads the issue again', async () => {
@@ -337,6 +359,181 @@ describe('IssuePage', () => {
         expect(mockSources.bugsink[read]).toHaveBeenCalledTimes(2);
       }
     });
+  });
+
+  describe('triage actions', () => {
+    const PATH = '/a/ahmedismail-bugsink-app/issues/SAMPLE-PYTHON-2';
+    const actionNames = () => screen.queryAllByRole('button').map((b) => b.textContent);
+    const triageNames = ['Resolve', 'Reopen', 'Mute', 'Unmute'];
+    const shown = () => actionNames().filter((name) => triageNames.includes(name ?? ''));
+
+    it('triage buttons follow the state', async () => {
+      const cases: Array<[IssueDetail['status'], string[]]> = [
+        ['open', ['Resolve', 'Mute']],
+        ['muted', ['Resolve', 'Unmute']],
+        ['resolved', ['Reopen']],
+      ];
+      for (const [status, names] of cases) {
+        mockSources.bugsink.getIssue.mockResolvedValue({ ...ISSUE, status });
+        const { unmount } = renderPage(`${PATH}?ds=bugsink`);
+        await screen.findByText('LookupError: failure');
+        expect(shown()).toEqual(names);
+        unmount();
+      }
+      mockSources.bugsink.canTriage.mockReturnValue(false);
+      renderPage(`${PATH}?ds=bugsink`);
+      await screen.findByText('LookupError: failure');
+      expect(shown()).toEqual([]);
+    });
+
+    it('an action shows the issue Bugsink answers', async () => {
+      mockSources.bugsink.getIssue.mockResolvedValue({ ...ISSUE, status: 'resolved' });
+      let answer: (issue: IssueDetail) => void = () => {};
+      mockSources.bugsink.triage.mockReturnValue(new Promise<IssueDetail>((resolve) => (answer = resolve)));
+      renderPage(`${PATH}?ds=bugsink`);
+      await screen.findByText('Resolved');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Reopen' }));
+
+      expect(mockSources.bugsink.triage).toHaveBeenCalledWith('uuid-1', 'reopen');
+      expect(screen.getByRole('button', { name: 'Reopen' })).toBeDisabled();
+      await act(async () => answer({ ...ISSUE, status: 'open' }));
+
+      expect(await screen.findByText('Open')).toBeInTheDocument();
+      expect(screen.queryByText('Resolved')).not.toBeInTheDocument();
+      expect(mockSources.bugsink.getIssue).toHaveBeenCalledTimes(1);
+      await waitFor(() => expect(mockSources.bugsink.getIssueHistory).toHaveBeenCalledTimes(2));
+      expect(shown()).toEqual(['Resolve', 'Mute']);
+    });
+
+    it('a failed action reads the issue again', async () => {
+      const message = 'Bugsink refused the request: Issue is not resolved.';
+      mockSources.bugsink.triage.mockRejectedValue({ data: { message } });
+      renderPage(`${PATH}?ds=bugsink`);
+      await screen.findByText('LookupError: failure');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Resolve' }));
+
+      expect(await screen.findByText(message)).toBeInTheDocument();
+      await waitFor(() => expect(mockSources.bugsink.getIssue).toHaveBeenCalledTimes(2));
+      await waitFor(() => expect(mockSources.bugsink.getIssueHistory).toHaveBeenCalledTimes(2));
+      expect(screen.getByRole('button', { name: 'Resolve' })).toBeEnabled();
+    });
+
+    it('drops the answer for an issue the page has left', async () => {
+      let answer: (issue: IssueDetail) => void = () => {};
+      mockSources.bugsink.triage.mockReturnValue(new Promise<IssueDetail>((resolve) => (answer = resolve)));
+      mockSources.bugsink.getIssue.mockImplementation((id: string) =>
+        Promise.resolve(id === 'X-2' ? { ...ISSUE, friendlyId: 'X-2', message: 'second' } : ISSUE)
+      );
+      function Jump() {
+        const navigate = useNavigate();
+        return <button onClick={() => navigate('/a/ahmedismail-bugsink-app/issues/X-2?ds=bugsink')}>jump</button>;
+      }
+      render(
+        <MemoryRouter
+          initialEntries={['/a/ahmedismail-bugsink-app/issues/X-1?ds=bugsink']}
+          future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+        >
+          <Routes>
+            <Route path="/a/ahmedismail-bugsink-app/issues/:issueId" element={<IssuePage />} />
+          </Routes>
+          <Jump />
+        </MemoryRouter>
+      );
+      await screen.findByText('LookupError: failure');
+      fireEvent.click(screen.getByRole('button', { name: 'Resolve' }));
+      fireEvent.click(screen.getByText('jump'));
+      expect(await screen.findByText('LookupError: second')).toBeInTheDocument();
+
+      await act(async () => answer({ ...ISSUE, status: 'resolved' }));
+
+      expect(screen.getByText('LookupError: second')).toBeInTheDocument();
+      expect(screen.queryByText('Resolved')).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Resolve' })).toBeEnabled();
+    });
+
+    describe('with a refresh while the action runs', () => {
+      const spinning = () =>
+        screen.getByTestId('data-testid RefreshPicker run button').getAttribute('aria-busy') === 'true';
+      let answer: (issue: IssueDetail) => void;
+      let reread: (issue: IssueDetail) => void;
+
+      beforeEach(async () => {
+        mockSources.bugsink.triage.mockReturnValue(new Promise<IssueDetail>((resolve) => (answer = resolve)));
+        mockSources.bugsink.getIssue
+          .mockResolvedValueOnce(ISSUE)
+          .mockReturnValueOnce(new Promise<IssueDetail>((resolve) => (reread = resolve)));
+        renderPage(`${PATH}?ds=bugsink`);
+        await screen.findByText('LookupError: failure');
+        fireEvent.click(screen.getByRole('button', { name: 'Resolve' }));
+        await act(async () => fireEvent.click(screen.getByTestId('data-testid RefreshPicker run button')));
+        await waitFor(() => expect(mockSources.bugsink.getIssue).toHaveBeenCalledTimes(2));
+      });
+
+      it('a read that lands after the answer does not overwrite it', async () => {
+        await act(async () => answer({ ...ISSUE, status: 'resolved' }));
+        expect(await screen.findByText('Resolved')).toBeInTheDocument();
+
+        await act(async () => reread({ ...ISSUE, status: 'open' }));
+
+        expect(screen.getByText('Resolved')).toBeInTheDocument();
+        expect(screen.queryByText('Open')).not.toBeInTheDocument();
+        await waitFor(() => expect(spinning()).toBe(false));
+      });
+
+      it('an answer that lands after the read shows the answer and stops loading', async () => {
+        await act(async () => reread({ ...ISSUE, status: 'open' }));
+        expect(await screen.findByText('Open')).toBeInTheDocument();
+
+        await act(async () => answer({ ...ISSUE, status: 'resolved' }));
+
+        expect(await screen.findByText('Resolved')).toBeInTheDocument();
+        await waitFor(() => expect(spinning()).toBe(false));
+      });
+    });
+
+    it('keeps the Event section mounted across an action', async () => {
+      let answer: (issue: IssueDetail) => void = () => {};
+      mockSources.bugsink.triage.mockReturnValue(new Promise<IssueDetail>((resolve) => (answer = resolve)));
+      renderPage(`${PATH}?ds=bugsink&event=e1`);
+      await screen.findByText('sdk-e1');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Resolve' }));
+      await act(async () => answer({ ...ISSUE, status: 'resolved' }));
+
+      expect(await screen.findByText('Resolved')).toBeInTheDocument();
+      expect(screen.getByText('sdk-e1')).toBeInTheDocument();
+      expect(screen.queryByText('Loading event...')).not.toBeInTheDocument();
+    });
+  });
+
+  it('refresh keeps the page while it reads', async () => {
+    const everySecondPending = <T,>(value: (id: string) => T) => {
+      let calls = 0;
+      return jest.fn((id: string) => (++calls % 2 === 0 ? PENDING() : Promise.resolve(value(id))));
+    };
+    Object.assign(mockSources.bugsink, {
+      getIssue: everySecondPending(() => ISSUE),
+      getIssueTags: everySecondPending(() => TAGS),
+      getIssueHistory: everySecondPending(() => HISTORY),
+      listEvents: everySecondPending(() => ({ rows: [EVENT], notices: [] })),
+      getEvent: everySecondPending((id) => eventDetail(id)),
+    });
+    renderPage('/a/ahmedismail-bugsink-app/issues/X-1?ds=bugsink&event=e1');
+    await screen.findByText('sdk-e1');
+    await screen.findByText('m4 plan probe');
+
+    await act(async () => fireEvent.click(screen.getByTestId('data-testid RefreshPicker run button')));
+    await waitFor(() => expect(mockSources.bugsink.getEvent).toHaveBeenCalledTimes(2));
+
+    expect(screen.getByRole('heading', { name: 'LookupError: failure' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Event' })).toBeInTheDocument();
+    expect(screen.getByText('sdk-e1')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: `Open event ${EVENT.eventId} in Bugsink` })).toBeInTheDocument();
+    expect(screen.getByText('development (26)')).toBeInTheDocument();
+    expect(screen.getByText('m4 plan probe')).toBeInTheDocument();
+    expect(screen.queryByText(/^Loading /)).not.toBeInTheDocument();
   });
 
   it('explains an unknown data source and reads nothing', async () => {

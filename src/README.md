@@ -9,6 +9,7 @@ It adds a Bugsink data source. The data source checks the Bugsink address and th
 - Grafana 13.2.0 or later.
 - A Bugsink instance that Grafana's server can reach over HTTP or HTTPS.
 - A Bugsink API token with the capabilities `projects:read`, `issues:read` and `events:read`. `events:read` is needed for the tags and events of an issue, for the event detail and for the events query.
+- To triage issues from Grafana, the token also needs `issues:triage` (see [Triage](#triage)).
 
 ## Create an API token
 
@@ -24,11 +25,13 @@ Create the token in Bugsink. A token has capabilities, and it can be bound to on
    - **Browser URL** (optional): the address of Bugsink as your browser reaches it. The plugin uses it for the links to issues. Leave it empty when it is the same as the Bugsink URL. It differs when Grafana and your browser reach Bugsink by different addresses. In the development stack, Grafana reaches Bugsink at `http://bugsink:8000` and the browser at `http://localhost:8800`, so the Bugsink URL is `http://bugsink:8000` and the Browser URL is `http://localhost:8800`.
    - **API token**: the token you created. Grafana stores it encrypted and does not show it again.
    - **Trace and log links** (optional): the Tempo and Loki data sources and the link settings. See [Trace and log links](#trace-and-log-links).
+   - **Triage** (optional, off by default): lets editors and admins resolve, reopen, mute and unmute issues. See [Triage](#triage). If anonymous users have the Editor or Admin role, anyone who can open Grafana can triage.
+   - **Hide stack trace text** (optional, off by default): see below.
 5. Click `Save & test`. A data source provisioned from a file has a `Test` button instead.
 
-The test makes at least one read request per capability and reports the result. It stops at the first answer that ends the check: a connection error or timeout, a rejected token, an answer that is not Bugsink's, or an unexpected answer to a capability check.
+The test makes at least one read request per capability and reports the result. With Triage on, it also checks `issues:triage` (see [Triage](#triage)). It stops at the first answer that ends the check: a connection error or timeout, a rejected token, an answer that is not Bugsink's, or an unexpected answer to a capability check.
 
-For an event whose stack frames are not inside an exception, the plugin shows Bugsink's own stack trace text, which can include local variables. Everyone who can query this data source in Grafana can read it.
+For an event whose stack frames are not inside an exception, the plugin shows Bugsink's own stack trace text, which can include local variables. Everyone who can query this data source in Grafana can read it. Switch on `Hide stack trace text` to remove that text: the plugin's backend drops it, so it never reaches the browser. The event then shows the notice `Bugsink's stack trace text is hidden for this data source.`
 
 ## Browsing issues in the app
 
@@ -37,7 +40,7 @@ The Bugsink app opens on a page that lists issues. You need at least one Bugsink
 - **Data source**: the picker at the top lists your Bugsink data sources. The default data source is selected first; without a default, the first one by name. Changing the data source clears the Project filter and, if Sort by is `Arrival order`, resets it to `Last seen`.
 - **Filters**: Project, State, Sort by, Order and Search are the controls of the query editor, described under [Query controls](#query-controls). They apply when you change them; Search applies when you leave the field or press Enter.
 - **Time range**: the picker at the top right. The default is the last 7 days. The page shows issues last seen within the range. The refresh button runs the query again; within 15 seconds of the same query it shows the same answer (see [Limits](#limits)).
-- **Table**: 25 issues per page, with the columns Issue, Type, Message, Transaction, Project, Events, First seen, Last seen and Status. In the Issue column, the short id opens the issue page in the app, and the icon beside it opens the issue in Bugsink in a new tab (see [Issue detail page](#issue-detail-page) and [Link to Bugsink](#link-to-bugsink)).
+- **Table**: 25 issues per page, with the columns Issue, Type, Message, Transaction, Project, Events, First seen, Last seen and Status, and Actions when triage is on for the data source and you may triage. In the Issue column, the short id opens the issue page in the app, and the icon beside it opens the issue in Bugsink in a new tab (see [Issue detail page](#issue-detail-page) and [Link to Bugsink](#link-to-bugsink)).
 - **States**: on the first load and after you change the data source, the page shows `Loading issues...`. A later load keeps the table on screen and shows a loading bar above it. When nothing matches, it shows `No issues match these filters in this time range.` A failed read shows the error message.
 
 The address bar holds the whole state: data source, filters, time range, sort and order. Copy the address to reopen the same list. The page keeps the address parameters it does not use, such as `orgId` and `kiosk`, as they are.
@@ -54,6 +57,8 @@ Click the short id of an issue in the list to open its page. The page has five s
 - **Tags**: one row per tag key, with its values and how many events carry each, for example `development (26), staging (3)`. A row shows the 5 values with the most events, then `and <n> more values`. The page reads at most 5000 tag values; when it stops there it shows `Only the first 5000 tag values were read.` Needs `events:read`.
 - **History**: what happened to the issue, newest first: the time, what happened (`First seen`, `Resolved`, `Muted`, `Regressed`, `Unmuted`, `Reopened`, `Resolved in the next release` or `Comment`), who did it when Bugsink knows, and the comment text. At most 5000 entries are read; when it stops there it shows `Only the newest 5000 history entries were read.`
 
+With triage on and a role that may triage, the page also shows the actions for the issue's state (see [Triage](#triage)).
+
 The buttons at the top: `Back to issues` returns to the list as you left it, with the same filters, data source and time range. `Open in Bugsink` opens the issue in Bugsink. The refresh button reads every section again, and retries a data source that failed to load. The list of events can be up to 15 seconds old (see [Limits](#limits)).
 
 The address holds the data source (`ds`), the list's parameters and the event on show (`event`), so a copied address opens the same page.
@@ -69,7 +74,7 @@ The section has these parts, in this order:
 - **Notices**: a warning for each bound the event reached (see [Event bounds](#event-bounds)).
 - **Message**: the event's message, when it has one, above the exceptions or the stack trace.
 - **Exception**: the exceptions of the event, each with its type (`Unknown exception` when it has none), its value and the badge `Unhandled` when the SDK marked it so. For `python` events the exceptions are in the order Bugsink holds them, the first cause first, with the frames from the oldest call to the newest, and `During handling of the above exception, another exception occurred:` between two exceptions. For every other platform the last exception comes first, the frames run from the newest call to the oldest, and `Caused by:` stands between two exceptions. A frame shows `file:line:column in function`. A frame the SDK marked as part of your application (`in_app`) shows in bold with up to 5 lines of source code before and after its line, when the SDK sent them. Other frames are folded, in groups of consecutive frames, under `<n> other frames`, without source lines. When no frame of an exception is part of your application, every frame shows.
-- **Stack trace**: for an event without exceptions. It is Bugsink's own text of the stack trace, shown as plain text, when the event has frames outside its exceptions, for example the stack trace of a message captured with `attach_stacktrace`. The same text shows when exceptions exist but none has frames. Bugsink writes this text, not the plugin, and it can include local variables. An event without frames shows `No stack trace.`
+- **Stack trace**: for an event without exceptions. It is Bugsink's own text of the stack trace, shown as plain text, when the event has frames outside its exceptions, for example the stack trace of a message captured with `attach_stacktrace`. The same text shows when exceptions exist but none has frames. Bugsink writes this text, not the plugin, and it can include local variables. An event without frames shows `No stack trace.` With `Hide stack trace text` on, the section shows `No stack trace.` and the notice `Bugsink's stack trace text is hidden for this data source.` shows among the Notices.
 - **Breadcrumbs**: the trail of actions before the event, oldest first, with Time, Type, Category, Level and Message. The message column shows the breadcrumb's data when it has no message.
 - **Event tags**: the tags of this one event, as Tag and Value.
 - **Contexts**: the contexts the SDK sent, such as `runtime` or `trace`, as Context, Key and Value.
@@ -92,6 +97,49 @@ The plugin reads an event from Bugsink and cuts it before it shows it. Each cut 
 The plugin reads at most 10 MB of Bugsink's answer for one event. A larger answer shows `The answer from Bugsink is larger than 10 MB.` in the Event section. The Events row of the event still links to Bugsink. Bugsink's own limit for an event is `MAX_EVENT_SIZE`, 1 MiB by default, so the plugin's limit is reached only when Bugsink is set to accept much larger events.
 
 An event id that is not valid shows `"<id>" is not an event id.`
+
+## Triage
+
+Triage lets people resolve, reopen, mute and unmute issues without leaving Grafana. It is off by default.
+
+### Switch it on
+
+1. Give the API token the capability `issues:triage`, in addition to the read capabilities.
+2. In the data source settings, switch on `Triage` and click `Save & test`.
+
+The switch is per data source. With it off, nobody sees triage controls, and the data source answers a triage call from an editor or admin with `Triage is switched off for this data source.`
+
+The test with Triage on asks Bugsink whether the token may triage. It calls resolve on an issue id that cannot exist, which changes nothing. The result is one of:
+
+- `The token can triage issues.`, added to the success message.
+- `The API token lacks: issues:triage.`
+- `Bugsink answered HTTP <n> to a check for issues:triage.`
+
+### Who may triage
+
+Users whose Grafana org role is Editor or Admin. A Viewer sees no controls, and a direct call is refused with `Only editors and admins can triage issues.`
+
+An anonymous session and a service account count by their org role.
+
+A triage call must carry the header `X-Bugsink-Triage: 1`. The app sends it; a script that calls the data source's resources must send it too. Without it the call is refused with `Triage calls need the header X-Bugsink-Triage: 1.`
+
+**Warning:** when Grafana allows anonymous access with the role Editor or Admin, everyone who can open Grafana can triage. The required header keeps a page on another web site from triaging through a visitor's browser, because such a page cannot add the header to its request. It does not stop anyone who can open Grafana with the Editor or Admin role, anonymous visitors included.
+
+Every action runs in Bugsink as the user of the API token. Bugsink's history does not name the Grafana user.
+
+### Actions
+
+| State | Issue page | Issue list |
+| :--- | :--- | :--- |
+| Open | Resolve, Mute | Resolve, Mute |
+| Muted | Resolve, Unmute | Resolve |
+| Resolved | Reopen | none |
+
+The list shows the buttons in the Actions column of each row. The issue page shows them under the summary. While an action runs, the buttons of that issue are disabled.
+
+After an action, the list row and the issue page show the state Bugsink returned at once. Another data source that points at the same Bugsink can show the old state for up to 15 seconds (see [Limits](#limits)).
+
+Triage is available in the app only. Dashboard tables and Explore do not offer it.
 
 ## Querying issues
 
@@ -183,7 +231,7 @@ A link is offered only for a data source you set. With neither Tempo nor Loki se
 
 The template is LogQL with these variables: `${trace_id}`, `${service}`, `${project}`, `${environment}`, `${release}` and `${tag:<name>}`, the value of the event tag `<name>`. An unknown `${...}` stays as written.
 
-- Put every variable inside a double-quoted string, for example `trace_id="${trace_id}"`. A template with a variable inside backticks or outside quotes is refused as an invalid setting.
+- Put every variable inside a double-quoted string, for example `trace_id="${trace_id}"`. A template with a variable inside backticks, outside quotes, inside a comment (`#`, `//` or `/* ... */`) or inside a string cut by a line break is refused as an invalid setting.
 - Values are escaped for a double-quoted LogQL string. With `=~` or `!~` the value is not escaped for a regular expression.
 - In a dashboard table, `${environment}`, `${release}` and `${tag:<name>}` render empty, except for an event ID query, which has the event. In the other rows, `${service}` is the project name.
 
@@ -195,7 +243,7 @@ With a trace ID of 32 lowercase hexadecimal characters on the event and a target
 
 An events query has a `Trace ID` column. Its cells carry the links `Open trace` and `Open logs`, in the cell menu. The links open Explore on the event's time plus and minus the window; for a table of several events, from the first to the last timestamp, plus and minus the window. Inside Explore, Grafana keeps Explore's own time range.
 
-The column is filled for a query with `trace:<id>` in Search and for an event ID query. An issue-only query carries no trace ID, so it has no links. Without a Tempo or a Loki data source, the column has no links. A row whose trace ID is not 32 lowercase hexadecimal characters has no links. The Logs query is rendered per row, in a `logs_query` field marked hidden, which a Grafana table can still show. The Loki link reads it. Do not remove it from a panel.
+The column is filled for a query with `trace:<id>` in Search and for an event ID query. An issue-only query carries no trace ID, so it has no links. Without a Tempo or a Loki data source, the column has no links. A row whose trace ID is not 32 lowercase hexadecimal characters has no links. The Logs query is rendered per row in a hidden `logs_query` field, which the Loki link reads. Do not remove it from a panel.
 
 ## Linking errors to traces
 
@@ -233,11 +281,11 @@ A failed test says one of the following. `<url>` is the URL as you typed it.
 | `Enter an API token.`                                                                                                        | Fill in the API token field.                                                                                                                                                                                                                                  |
 | `The data source settings are invalid.` | Grafana could not build an HTTP client from a setting supplied through provisioning or the API, for example a TLS certificate setting, or a link setting has the wrong type, for example a number where a data source UID belongs. Correct that setting. |
 | `The link time window must be a whole number of minutes from 1 to 1440.` | Fix the Time window: a whole number from 1 to 1440, or empty for 15. |
-| `In the logs query, put every variable inside double quotes.` | Edit the Logs query so that every variable sits inside a double-quoted string. |
+| `In the logs query, put every variable inside double quotes.` | Edit the Logs query so that every variable sits inside a double-quoted string on one line, and not in a comment. |
 | `Cannot reach Bugsink at <url>: <cause>.`                                                                                    | Grafana's server could not connect. The cause says why: a refused connection, a DNS failure or a TLS error. Check the address, the network path from the Grafana server to Bugsink and the certificate.                                                       |
 | `Bugsink at <url> did not answer within 10 seconds.`                                                                         | Check that Bugsink is running and not overloaded, and that nothing between Grafana and Bugsink drops the traffic.                                                                                                                                             |
 | `Bugsink rejected the API token. Check that it was copied in full and has not been deleted.`                                 | Paste the token again, or create a new one in Bugsink.                                                                                                                                                                                                        |
-| `<url> did not answer like a Bugsink API (HTTP <status>). Check the URL: it is the address of Bugsink itself, without /api.` | The address answers, but not as Bugsink's API does. Check the URL for a wrong host, port or path prefix, or a proxy in front of Bugsink.                                                                                                                      |
+| `<url> did not answer like a Bugsink API (HTTP <status>). Check the URL: it is the address of Bugsink itself, without /api.` | The address answers, but not as Bugsink's API does. Check the URL for a wrong host, port or path prefix, or a proxy in front of Bugsink. The plugin does not follow redirects, so an address that redirects (HTTP 301, 302, 303, 307 or 308) fails here: enter the address it redirects to.                                                                                                                      |
 | `The API token lacks: <capabilities>.`                                                                                       | Add the named capabilities to the token in Bugsink, or use a token that has them. The test names every missing capability at once.                                                                                                                            |
 | `Bugsink answered HTTP <status> to a check for <capability>.`                                                                | Bugsink answered a capability check in a way the plugin does not expect. Check the Bugsink version and its server log.                                                                                                                                        |
 

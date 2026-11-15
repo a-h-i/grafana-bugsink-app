@@ -2,7 +2,7 @@
 import React from 'react';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 
-import { IssueRow } from '../../datasource/types';
+import { IssueRow, TriageAction } from '../../datasource/types';
 import { MemoryRouter } from 'react-router-dom';
 import { IssueTable, PAGE_SIZE } from './IssueTable';
 
@@ -26,10 +26,12 @@ function row(overrides: Partial<IssueRow> = {}): IssueRow {
 
 const issueHref = (r: IssueRow) => `/a/app/issues/${r.id}?ds=x`;
 
-function renderTable(rows: IssueRow[]) {
+type Triage = { busyIds?: ReadonlySet<string>; onAction: (row: IssueRow, action: TriageAction) => void };
+
+function renderTable(rows: IssueRow[], triage?: Triage) {
   return render(
     <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-      <IssueTable rows={rows} timeZone="utc" issueHref={issueHref} />
+      <IssueTable rows={rows} timeZone="utc" issueHref={issueHref} triage={triage} />
     </MemoryRouter>
   );
 }
@@ -111,5 +113,56 @@ describe('IssueTable', () => {
     renderTable([]);
 
     expect(screen.getByText('No issues match these filters in this time range.')).toBeInTheDocument();
+  });
+
+  it('has no Actions column without triage', () => {
+    renderTable([row()]);
+
+    expect(screen.queryByRole('columnheader', { name: 'Actions' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Resolve/ })).not.toBeInTheDocument();
+  });
+
+  it('offers Resolve and Mute on an open row, Resolve on a muted row and nothing on a resolved row', () => {
+    renderTable(
+      [
+        row({ id: '1', friendlyId: 'SAMPLE-PYTHON-2', status: 'open' }),
+        row({ id: '2', friendlyId: 'SAMPLE-PYTHON-3', status: 'muted' }),
+        row({ id: '3', friendlyId: 'SAMPLE-PYTHON-4', status: 'resolved' }),
+      ],
+      { onAction: jest.fn() }
+    );
+
+    expect(screen.getByRole('columnheader', { name: 'Actions' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Resolve SAMPLE-PYTHON-2' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Mute SAMPLE-PYTHON-2' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Resolve SAMPLE-PYTHON-3' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Mute SAMPLE-PYTHON-3' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Unmute SAMPLE-PYTHON-3' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /SAMPLE-PYTHON-4$/ })).not.toBeInTheDocument();
+  });
+
+  it('calls onAction with the row and the action', () => {
+    const onAction = jest.fn();
+    const open = row();
+    renderTable([open], { onAction });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Resolve SAMPLE-PYTHON-2' }));
+
+    expect(onAction).toHaveBeenCalledWith(open, 'resolve');
+  });
+
+  it('disables only the busy rows', () => {
+    renderTable(
+      [
+        row({ id: '1', friendlyId: 'SAMPLE-PYTHON-2' }),
+        row({ id: '2', friendlyId: 'SAMPLE-PYTHON-3' }),
+        row({ id: '3', friendlyId: 'SAMPLE-PYTHON-4' }),
+      ],
+      { busyIds: new Set(['1', '3']), onAction: jest.fn() }
+    );
+
+    expect(screen.getByRole('button', { name: 'Resolve SAMPLE-PYTHON-2' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Resolve SAMPLE-PYTHON-3' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Resolve SAMPLE-PYTHON-4' })).toBeDisabled();
   });
 });

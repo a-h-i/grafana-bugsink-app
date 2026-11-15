@@ -2,7 +2,7 @@
 import React, { ChangeEvent } from 'react';
 import { DataSourcePluginOptionsEditorProps } from '@grafana/data';
 import { DataSourcePicker } from '@grafana/runtime';
-import { Field, Input, SecretInput } from '@grafana/ui';
+import { Field, Input, SecretInput, Switch } from '@grafana/ui';
 import { BugsinkOptions, BugsinkSecureJsonData } from '../types';
 
 const DEFAULT_LOGS_QUERY = '{service_name="${service}"} | trace_id="${trace_id}"';
@@ -155,6 +155,32 @@ export function ConfigEditor({ options, onOptionsChange }: Props) {
           width={50}
           value={jsonData.serviceTag ?? 'service'}
           onChange={(event) => setJsonData({ serviceTag: event.target.value })}
+        />
+      </Field>
+      <h3 className="page-heading">Triage</h3>
+      <Field
+        label="Triage"
+        description="Let editors and admins resolve, reopen, mute and unmute issues from Grafana. The API token needs issues:triage. Every action runs as the token's Bugsink user. If anonymous users have the Editor or Admin role, anyone who can open Grafana can triage."
+        htmlFor="bugsink-triage"
+      >
+        <Switch
+          id="bugsink-triage"
+          aria-label="Triage"
+          value={jsonData.triageEnabled === true}
+          onChange={(event) => setJsonData({ triageEnabled: event.currentTarget.checked })}
+        />
+      </Field>
+      <h3 className="page-heading">Privacy</h3>
+      <Field
+        label="Hide stack trace text"
+        description="Do not show Bugsink's own stack trace text, which can include local variables, for events without structured frames."
+        htmlFor="bugsink-hide-stacktrace-text"
+      >
+        <Switch
+          id="bugsink-hide-stacktrace-text"
+          aria-label="Hide stack trace text"
+          value={jsonData.hideStacktraceText === true}
+          onChange={(event) => setJsonData({ hideStacktraceText: event.currentTarget.checked })}
         />
       </Field>
     </>

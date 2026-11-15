@@ -1,14 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import React from 'react';
-import { dateTimeFormat } from '@grafana/data';
 import { TimeZone } from '@grafana/schema';
-import { IssueDetail, IssueStatus } from '../../datasource/types';
-
-const STATUS_LABELS: Record<IssueStatus, string> = { open: 'Open', muted: 'Muted', resolved: 'Resolved' };
-const TIME_FORMAT = 'YYYY-MM-DD HH:mm:ss';
+import { IssueDetail } from '../../datasource/types';
+import { formatTime, STATUS_LABELS } from '../format';
 
 export function IssueSummary({ issue, timeZone }: { issue: IssueDetail; timeZone: TimeZone }): React.JSX.Element {
-  const time = (value: string) => dateTimeFormat(value, { timeZone, format: TIME_FORMAT });
+  const time = (value: string) => formatTime(value, timeZone);
   const rows: Array<[string, string]> = [
     ['Status', STATUS_LABELS[issue.status]],
     ['Project', issue.project],

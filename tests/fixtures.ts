@@ -36,3 +36,7 @@ export async function openFirstIssue(page: Page, name: string | RegExp = /^SAMPL
   }).toPass();
   await firstIssue.click();
 }
+
+export function basicAuth(user: { user: string; password: string }): Record<string, string> {
+  return { Authorization: `Basic ${Buffer.from(`${user.user}:${user.password}`).toString('base64')}` };
+}

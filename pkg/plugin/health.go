@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"net/http"
 	"strconv"
 	"strings"
 	"time"
@@ -26,6 +27,7 @@ type prober interface {
 	ListProjects(ctx context.Context) ([]bugsink.Project, error)
 	GetIssue(ctx context.Context, id string) (bugsink.Issue, error)
 	ListEventsWithoutIssue(ctx context.Context) error
+	Triage(ctx context.Context, id string, action bugsink.TriageAction) (bugsink.Issue, error)
 }
 
 // probe is one capability check; a nil error or an APIError with status has means the token has it.
@@ -39,13 +41,21 @@ func errorResult(format string, args ...any) *backend.CheckHealthResult {
 	return &backend.CheckHealthResult{Status: backend.HealthStatusError, Message: fmt.Sprintf(format, args...)}
 }
 
-// checkHealth runs the capability probes and renders the contract's status and message.
-func checkHealth(ctx context.Context, url string, timeout time.Duration, p prober) *backend.CheckHealthResult {
+// checkHealth runs the capability probes, issues:triage only when triage is on, and renders the status and message.
+func checkHealth(ctx context.Context, url string, timeout time.Duration, p prober, triage bool) *backend.CheckHealthResult {
 	var projects []bugsink.Project
 	probes := []probe{
 		{bugsink.ProjectsRead, 0, func() (err error) { projects, err = p.ListProjects(ctx); return }},
 		{bugsink.IssuesRead, 404, func() (err error) { _, err = p.GetIssue(ctx, absentIssueID); return }},
 		{bugsink.EventsRead, 400, func() error { return p.ListEventsWithoutIssue(ctx) }},
+	}
+	if triage {
+		probes = append(probes, probe{bugsink.IssuesTriage, 404, func() error {
+			if _, err := p.Triage(ctx, absentIssueID, bugsink.Resolve); err != nil {
+				return err
+			}
+			return &bugsink.APIError{Status: http.StatusOK} // no issue has the absent id, so a success tells nothing
+		}})
 	}
 
 	var lacking []string
@@ -83,7 +93,11 @@ func checkHealth(ctx context.Context, url string, timeout time.Duration, p probe
 	if len(lacking) > 0 {
 		return errorResult("The API token lacks: %s.", strings.Join(lacking, ", "))
 	}
-	return &backend.CheckHealthResult{Status: backend.HealthStatusOk, Message: connectedMessage(projects)}
+	message := connectedMessage(projects)
+	if triage {
+		message += " The token can triage issues."
+	}
+	return &backend.CheckHealthResult{Status: backend.HealthStatusOk, Message: message}
 }
 
 func connectedMessage(projects []bugsink.Project) string {

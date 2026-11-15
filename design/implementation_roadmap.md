@@ -157,12 +157,20 @@ Built; see [`plans/m6-trace-log-links.md`](plans/m6-trace-log-links.md). Links o
 
 ### M7: Basic triage
 
-* **Scope:** `CallResource` routes for resolve, reopen, mute and unmute; the caller check in the backend
-  (org role Editor or higher by default); triage on/off per data source; health check for
-  `issues:triage`; inline Resolve and Mute on the issue list; the four actions on the issue detail;
-  state shown from the issue Bugsink returns.
-* **Demo:** as an Editor, resolve an issue from the list and reopen it from the detail page; as a Viewer,
-  see no controls and get a refusal when calling the route directly; with triage switched off, the same.
+Built; see [`plans/m7-basic-triage.md`](plans/m7-basic-triage.md). Triage runs only through four POST resource
+routes of the data source, which need the header `X-Bugsink-Triage: 1`.
+
+* **Scope:** resource routes for resolve, reopen, mute and unmute; the caller check in the backend (org role
+  exactly Editor or Admin, anonymous sessions and service accounts by their role, fixed until M8); the `Triage`
+  switch per data source, off by default; the required triage header; the health check probe for
+  `issues:triage`; inline Resolve and Mute on the issue list; the actions for the issue's state under the
+  summary of the issue page; state shown from the issue Bugsink returns; the `Hide stack trace text` switch;
+  `logs_query` hidden through `hideFrom`; a Bugsink client that never follows redirects; the provisioned
+  `Bugsink triage` data source and two basic-auth users for the end-to-end tests.
+* **Demo:** as an Editor, resolve an issue from the list and reopen it from the issue page, then mute and
+  unmute it there; as a Viewer, see no controls and get a refusal when calling the route directly; with
+  triage switched off, see no controls and get the switched-off refusal; a POST without the triage header is
+  refused. Runs as an e2e test.
 
 ### M8: Full triage
 
@@ -225,7 +233,7 @@ M7 to M10 following as minor versions.
 
 ## Open decisions
 
-All nine decisions are made on 2026-11-15 and are in the milestones above; spec §10 lists them. Among them: the client generated from Bugsink's PolyForm Shield schema ships without asking for permission (risk accepted by the owner).
+All nine decisions were made on 2026-11-15 and are in the milestones above; spec §10 lists them. Among them: the client generated from Bugsink's PolyForm Shield schema ships without asking for permission (risk accepted by the owner).
 
 | Decision | Needed by | Notes |
 | :--- | :--- | :--- |

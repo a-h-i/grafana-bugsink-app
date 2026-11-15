@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { config, PluginPage } from '@grafana/runtime';
 import { Alert, Button, LinkButton, LoadingPlaceholder, RefreshPicker } from '@grafana/ui';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
@@ -9,14 +9,25 @@ import { EventTable } from './issue/EventTable';
 import { IssueHistory } from './issue/IssueHistory';
 import { IssueSummary } from './issue/IssueSummary';
 import { IssueTags } from './issue/IssueTags';
+import { TriageAction } from '../datasource/types';
 import { NoDataSource } from './NoDataSource';
 import { issuePath, listPath, withEvent } from './routes';
+import { TriageButtons, triageActions } from './TriageButtons';
 import { useDataSource } from './useDataSource';
 
-type Section<T> = { source: BugsinkDataSource; key: string; refresh: number } & ({ value: T } | { error: string });
+type Section<T> = { source: BugsinkDataSource; key: string; version: string } & ({ value: T } | { error: string });
 
 function messageOf(error: { message?: string; data?: { message?: string } }, fallback: string): string {
   return error?.message || error?.data?.message || fallback;
+}
+
+interface SectionRead<T> {
+  loading: boolean;
+  pending: boolean;
+  value?: T;
+  error?: string;
+  replace: (value: T) => void;
+  reload: () => void;
 }
 
 function useSection<T>(
@@ -25,30 +36,48 @@ function useSection<T>(
   refresh: number,
   read: (source: BugsinkDataSource) => Promise<T>,
   fallback: string
-): { pending: boolean; value?: T; error?: string } {
+): SectionRead<T> {
   const [section, setSection] = useState<Section<T>>();
+  const [reloads, setReloads] = useState(0);
+  const version = `${refresh}.${reloads}`;
+  const latestVersion = useRef(version);
+  const replaced = useRef(0);
+  useEffect(() => {
+    latestVersion.current = version;
+  });
 
   useEffect(() => {
     if (!source || key === undefined) {
       return;
     }
     let active = true;
+    const started = replaced.current;
     read(source)
-      .then((value): Section<T> => ({ source, key, refresh, value }))
-      .catch((error): Section<T> => ({ source, key, refresh, error: messageOf(error, fallback) }))
-      .then((result) => active && setSection(result));
+      .then((value): Section<T> => ({ source, key, version, value }))
+      .catch((error): Section<T> => ({ source, key, version, error: messageOf(error, fallback) }))
+      .then((result) => active && replaced.current === started && setSection(result));
     return () => {
       active = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- the read is fixed per section
-  }, [source, key, refresh]);
+  }, [source, key, version]);
 
-  const current =
-    section && section.source === source && section.key === key && section.refresh === refresh ? section : undefined;
-  if (!current) {
-    return { pending: source !== undefined && key !== undefined };
+  const replace = (value: T) => {
+    if (source && key !== undefined) {
+      replaced.current += 1;
+      setSection({ source, key, version: latestVersion.current, value });
+    }
+  };
+  const reload = () => setReloads((count) => count + 1);
+  const wanted = source !== undefined && key !== undefined;
+  const kept = section && section.source === source && section.key === key ? section : undefined;
+  const pending = wanted && kept?.version !== version;
+  if (!kept) {
+    return { loading: wanted, pending, replace, reload };
   }
-  return 'error' in current ? { pending: false, error: current.error } : { pending: false, value: current.value };
+  return 'error' in kept
+    ? { loading: false, pending, error: kept.error, replace, reload }
+    : { loading: false, pending, value: kept.value, replace, reload };
 }
 
 function SectionState({
@@ -56,9 +85,9 @@ function SectionState({
   state,
 }: {
   loading: string;
-  state: { pending: boolean; error?: string };
+  state: { loading: boolean; error?: string };
 }): React.JSX.Element | null {
-  if (state.pending) {
+  if (state.loading) {
     return <LoadingPlaceholder text={loading} />;
   }
   return state.error ? <Alert severity="error" title={state.error} /> : null;
@@ -72,7 +101,7 @@ function PageSection({
 }: {
   title: string;
   loading: string;
-  state: { pending: boolean; error?: string };
+  state: { loading: boolean; error?: string };
   children: React.ReactNode;
 }): React.JSX.Element {
   return (
@@ -123,9 +152,43 @@ export function IssuePage(): React.JSX.Element {
     issue !== undefined &&
     ![issueId, issue.id, issue.friendlyId].some((id) => id.toLowerCase() === event.value!.issueId.toLowerCase());
   const eventState = foreignEvent
-    ? { pending: false, error: 'This event belongs to another issue.' }
-    : { ...event, pending: event.pending || (event.value !== undefined && issue === undefined) };
+    ? { loading: false, error: 'This event belongs to another issue.' }
+    : { ...event, loading: event.loading || (event.value !== undefined && issue === undefined) };
   const pending = summary.pending || tags.pending || history.pending || events.pending || event.pending;
+
+  const [acting, setActing] = useState<string>();
+  const [failure, setFailure] = useState<{ issueId: string; message: string }>();
+  const current = useRef({ source, issueId });
+  useEffect(() => {
+    current.current = { source, issueId };
+  });
+  const busy = acting === issueId;
+
+  const onAction = (action: TriageAction) => {
+    if (!source || !issue) {
+      return;
+    }
+    const started = { source, issueId };
+    const stillHere = () => current.current.source === started.source && current.current.issueId === started.issueId;
+    setActing(issueId);
+    setFailure(undefined);
+    source
+      .triage(issue.id, action)
+      .then((answer) => {
+        if (stillHere()) {
+          summary.replace(answer);
+          history.reload();
+        }
+      })
+      .catch((error) => {
+        if (stillHere()) {
+          setFailure({ issueId, message: messageOf(error, 'The action failed.') });
+          summary.reload();
+          history.reload();
+        }
+      })
+      .finally(() => setActing((id) => (id === started.issueId ? undefined : id)));
+  };
 
   const actions = [
     <Button key="back" icon="arrow-left" variant="secondary" onClick={() => navigate(listPath(withEvent(search)))}>
@@ -159,6 +222,10 @@ export function IssuePage(): React.JSX.Element {
       {source && !summary.error && (
         <>
           {issue && <IssueSummary issue={issue} timeZone={timeZone} />}
+          {issue && source.canTriage() && (
+            <TriageButtons actions={triageActions(issue.status)} busy={busy} size="md" onAction={onAction} />
+          )}
+          {failure?.issueId === issueId && <Alert severity="error" title={failure.message} />}
           {eventId && (
             <PageSection title="Event" loading="Loading event..." state={eventState}>
               {event.value && issue && !foreignEvent && (

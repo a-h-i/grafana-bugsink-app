@@ -7,6 +7,7 @@ import { App } from './App';
 const mockSource = {
   getProjects: jest.fn().mockResolvedValue([]),
   listIssues: jest.fn().mockResolvedValue({ rows: [] }),
+  canTriage: jest.fn().mockReturnValue(false),
   getIssue: jest.fn(),
   getIssueTags: jest.fn(() => new Promise(() => {})),
   getIssueHistory: jest.fn(() => new Promise(() => {})),

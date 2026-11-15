@@ -228,7 +228,8 @@ func TestEventsFrameLinks(t *testing.T) {
 		t.Fatalf("field 5 %q %+v", traceField.Name, traceField.Config)
 	}
 	logs := frame.Fields[9]
-	if logs.Name != "logs_query" || logs.Config.Custom["hidden"] != true {
+	if logs.Name != "logs_query" || logs.Config.Custom["hidden"] != true ||
+		!reflect.DeepEqual(logs.Config.Custom["hideFrom"], map[string]any{"viz": true, "legend": true, "tooltip": true}) {
 		t.Fatalf("field 9 %q %+v", logs.Name, logs.Config)
 	}
 	if got := stringColumn(t, frame, "trace_id"); !reflect.DeepEqual(got, []string{trace, trace}) {

@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 )
 
@@ -170,6 +171,61 @@ func answer(status int, body string) *httptest.Server {
 		w.WriteHeader(status)
 		_, _ = fmt.Fprint(w, body)
 	}))
+}
+
+// redirectTo is a server that answers every request with status and a Location on target, counting the requests.
+func redirectTo(t *testing.T, status int, target string, count *atomic.Int32) *httptest.Server {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		count.Add(1)
+		http.Redirect(w, r, target+r.URL.Path, status)
+	}))
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+func TestNeverFollowsRedirects(t *testing.T) {
+	clients := map[string]*http.Client{"default client": nil, "given client": {}}
+	calls := map[string]func(c *Client) error{
+		"GET": func(c *Client) error { _, err := c.ListProjects(context.Background()); return err },
+		"triage POST": func(c *Client) error {
+			_, err := c.Triage(context.Background(), "SAMPLE-PYTHON-7", Resolve)
+			return err
+		},
+	}
+	for clientName, hc := range clients {
+		for callName, call := range calls {
+			for _, status := range []int{301, 302, 303, 307, 308} {
+				t.Run(fmt.Sprintf("%s/%s/%d", clientName, callName, status), func(t *testing.T) {
+					var targetSeen, redirectSeen atomic.Int32
+					target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+						targetSeen.Add(1)
+						_, _ = fmt.Fprint(w, `{"next":null,"previous":null,"results":[]}`)
+					}))
+					t.Cleanup(target.Close)
+					srv := redirectTo(t, status, target.URL, &redirectSeen)
+					c, err := New(srv.URL, "secret-token", hc)
+					if err != nil {
+						t.Fatal(err)
+					}
+					err = call(c)
+					var apiErr *APIError
+					if !errors.As(err, &apiErr) || apiErr.Status != status {
+						t.Fatalf("err %v, want an APIError with status %d", err, status)
+					}
+					if strings.Contains(err.Error(), target.URL) || strings.Contains(err.Error(), "secret-token") {
+						t.Fatalf("error carries the Location or the token: %v", err)
+					}
+					if n := redirectSeen.Load(); n != 1 {
+						t.Fatalf("Bugsink saw %d requests, want 1", n)
+					}
+					if n := targetSeen.Load(); n != 0 {
+						t.Fatalf("the Location server saw %d requests", n)
+					}
+				})
+			}
+		}
+	}
 }
 
 func TestCapabilityRefusal(t *testing.T) {

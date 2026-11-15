@@ -33,7 +33,7 @@ func (d *Datasource) CallResource(ctx context.Context, req *backend.CallResource
 	return d.resources.CallResource(ctx, req, sender)
 }
 
-// routes builds the resource router; every route answers GET only.
+// routes builds the resource router; reads answer GET only, triage actions POST only.
 func (d *Datasource) routes() *http.ServeMux {
 	mux := http.NewServeMux()
 	get := func(pattern string, h http.HandlerFunc) {
@@ -43,11 +43,22 @@ func (d *Datasource) routes() *http.ServeMux {
 			writeMessage(w, http.StatusMethodNotAllowed, "Method not allowed.")
 		})
 	}
+	post := func(pattern string, h http.HandlerFunc) {
+		mux.HandleFunc("POST "+pattern, h)
+		mux.HandleFunc(pattern, func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Cache-Control", "no-store")
+			w.Header().Set("Allow", http.MethodPost)
+			writeMessage(w, http.StatusMethodNotAllowed, "Method not allowed.")
+		})
+	}
 	get("/projects", d.handleProjects)
 	get("/issues/{id}", d.handleIssue)
 	get("/issues/{id}/tags", d.handleIssueTags)
 	get("/issues/{id}/history", d.handleIssueHistory)
 	get("/events/{id}", d.handleEvent)
+	for _, action := range []bugsink.TriageAction{bugsink.Resolve, bugsink.Reopen, bugsink.Mute, bugsink.Unmute} {
+		post("/issues/{id}/"+string(action), d.handleTriage(action))
+	}
 	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
 		writeMessage(w, http.StatusNotFound, "Not found.")
 	})
@@ -449,7 +460,15 @@ func (d *Datasource) handleEvent(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		project = strconv.Itoa(event.ProjectID)
 	}
-	writeJSON(w, http.StatusOK, eventJSON(event, project, d.browserURL, d.links))
+	textHidden := d.hideStacktraceText && event.StacktraceMD != ""
+	if textHidden {
+		event.StacktraceMD, event.StacktraceMDCut = "", false
+	}
+	body := eventJSON(event, project, d.browserURL, d.links)
+	if textHidden {
+		body.Notices = append(body.Notices, "Bugsink's stack trace text is hidden for this data source.")
+	}
+	writeJSON(w, http.StatusOK, body)
 }
 
 func writeMessage(w http.ResponseWriter, status int, message string) {

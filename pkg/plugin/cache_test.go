@@ -49,6 +49,44 @@ func TestCacheKeysAreIndependent(t *testing.T) {
 	}
 }
 
+func TestCacheClear(t *testing.T) {
+	c, _ := newTestCache(time.Minute, 4)
+	c.set("a", "1")
+	c.set("b", "2")
+	c.clear()
+	for _, k := range []string{"a", "b"} {
+		if v, ok := c.get(k); ok {
+			t.Fatalf("%s = %q after clear", k, v)
+		}
+	}
+	c.set("a", "3")
+	if v, ok := c.get("a"); !ok || v != "3" {
+		t.Fatalf("after clear and set: got %q %v", v, ok)
+	}
+}
+
+func TestCacheSetIfGeneration(t *testing.T) {
+	c, _ := newTestCache(time.Minute, 4)
+	gen := c.generation()
+	if !c.setIfGeneration("a", "1", gen) {
+		t.Fatal("store refused with no clear in between")
+	}
+	if v, ok := c.get("a"); !ok || v != "1" {
+		t.Fatalf("a = %q %v", v, ok)
+	}
+	gen = c.generation()
+	c.clear()
+	if c.setIfGeneration("b", "2", gen) {
+		t.Fatal("store accepted after a clear")
+	}
+	if v, ok := c.get("b"); ok {
+		t.Fatalf("b = %q after a clear between reading the generation and storing", v)
+	}
+	if !c.setIfGeneration("b", "3", c.generation()) {
+		t.Fatal("store refused with the current generation")
+	}
+}
+
 func TestCacheSetDropsExpiredEntriesWhileNotFull(t *testing.T) {
 	c, clock := newTestCache(10*time.Second, 8)
 	c.set("a", "1")

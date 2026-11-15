@@ -4,18 +4,19 @@ import {
   DataLink,
   DataSourceInstanceSettings,
   FieldType,
+  OrgRole,
   ScopedVars,
   TimeRange,
   dateTime,
 } from '@grafana/data';
-import { DataSourceWithBackend, setTemplateSrv } from '@grafana/runtime';
+import { config, DataSourceWithBackend, setTemplateSrv } from '@grafana/runtime';
 import { lastValueFrom, of } from 'rxjs';
 import { BugsinkDataSource } from './datasource';
 import { BugsinkOptions, DEFAULT_QUERY } from './types';
 
 const settings = { uid: 'bugsink', name: 'Bugsink', jsonData: {} } as DataSourceInstanceSettings<BugsinkOptions>;
 
-function createDataSource() {
+function createDataSource(jsonData: BugsinkOptions = {}) {
   setTemplateSrv({
     replace: (target?: string, scopedVars?: ScopedVars) =>
       (target ?? '').replace('$env', String(scopedVars?.env?.value ?? '')),
@@ -23,7 +24,7 @@ function createDataSource() {
     containsTemplate: () => false,
     updateTimeRange: () => {},
   });
-  return new BugsinkDataSource(settings);
+  return new BugsinkDataSource({ ...settings, jsonData });
 }
 
 describe('BugsinkDataSource', () => {
@@ -74,13 +75,70 @@ describe('BugsinkDataSource', () => {
     expect(getResource).toHaveBeenCalledWith('events/a%2Fb', undefined, { showErrorAlert: false });
   });
 
-  it('encodes the issue id in the resource path', async () => {
+  it.each([
+    ['getIssue', 'a/b'],
+    ['getIssue', '..'],
+    ['getIssueTags', ''],
+    ['getIssueHistory', 'x y'],
+  ] as const)('%s rejects %j as an issue id without a request', async (method, id) => {
     const ds = createDataSource();
     const getResource = jest.spyOn(ds, 'getResource').mockResolvedValue({});
 
-    await ds.getIssue('a/b');
+    await expect(ds[method](id)).rejects.toThrow(`"${id}" is not an issue id.`);
+    expect(getResource).not.toHaveBeenCalled();
+  });
 
-    expect(getResource).toHaveBeenCalledWith('issues/a%2Fb', undefined, { showErrorAlert: false });
+  describe('triage', () => {
+    const ID = 'c0d07f26-4cc5-478c-8ae4-7e0fda5bc26c';
+
+    it('posts the action for the issue with the triage header, no data and no error alert', async () => {
+      const ds = createDataSource();
+      const postResource = jest.spyOn(ds, 'postResource').mockResolvedValue({ id: ID, status: 'resolved' });
+
+      await expect(ds.triage(ID, 'resolve')).resolves.toEqual({ id: ID, status: 'resolved' });
+      expect(postResource).toHaveBeenCalledWith(`issues/${ID}/resolve`, undefined, {
+        showErrorAlert: false,
+        headers: { 'X-Bugsink-Triage': '1' },
+      });
+    });
+
+    it('posts for an id of 100 characters', async () => {
+      const ds = createDataSource();
+      const postResource = jest.spyOn(ds, 'postResource').mockResolvedValue({});
+      const id = 'a'.repeat(100);
+
+      await ds.triage(id, 'mute');
+      expect(postResource).toHaveBeenCalledWith(`issues/${id}/mute`, undefined, expect.anything());
+    });
+
+    it.each(['a/b', 'x?y', 'a'.repeat(101)])('rejects the id %j without a request', async (id) => {
+      const ds = createDataSource();
+      const postResource = jest.spyOn(ds, 'postResource').mockResolvedValue({});
+
+      await expect(ds.triage(id, 'mute')).rejects.toThrow(`"${id}" is not an issue id.`);
+      expect(postResource).not.toHaveBeenCalled();
+    });
+
+    describe('canTriage', () => {
+      const originalRole = config.bootData.user.orgRole;
+
+      afterEach(() => {
+        config.bootData.user.orgRole = originalRole;
+      });
+
+      it.each([
+        ['Editor', true, true],
+        ['Admin', true, true],
+        ['Viewer', true, false],
+        ['', true, false],
+        ['Editor', false, false],
+        ['Admin', undefined, false],
+      ] as const)('with role %j and triage %j is %j', (role, triageEnabled, expected) => {
+        config.bootData.user.orgRole = role as OrgRole;
+
+        expect(createDataSource({ triageEnabled }).canTriage()).toBe(expected);
+      });
+    });
   });
 
   describe('query', () => {

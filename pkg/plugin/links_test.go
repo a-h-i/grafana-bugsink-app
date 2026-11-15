@@ -45,12 +45,17 @@ func TestParseLinkSettings(t *testing.T) {
 	if s, invalid = parseLinkSettings(json.RawMessage(`{"logsQuery":"  "}`)); invalid != "" || s.logsQuery != defaultLogsQuery {
 		t.Fatalf("blank query = %+v %q", s, invalid)
 	}
-	for _, q := range []string{defaultLogsQuery, `"a ${service} b"`, `"\"${service}"`, `${foo}`, `{a="${foo}"} | x=` + "`${foo}`"} {
+	for _, q := range []string{defaultLogsQuery, `"a ${service} b"`, `"\"${service}"`, `${foo}`, `{a="${foo}"} | x=` + "`${foo}`",
+		`sum(count_over_time({a="${service}"}[5m])) / sum(count_over_time({a="b"}[5m]))`,
+		`{a="b"} /* note */ | x="${service}"`, "{a=\"b\"} // note\n| x=\"${service}\"", "{a=\"b\"} /* a\n\" b */ | x=\"${service}\"",
+		`{a="${service}"} | line_format "a//b /* c"`, `{a="${service}"} | x=` + "`// /*`", `{a="${service}"} /* unclosed`} {
 		if _, invalid = parseLinkSettings(json.RawMessage(`{"logsQuery":` + strconv.Quote(q) + `}`)); invalid != "" {
 			t.Fatalf("query %s: invalid = %q", q, invalid)
 		}
 	}
-	for _, q := range []string{"{s=`${service}`}", "| status >= ${tag:min}", `"${service}`, "`\"${service}\"`", `{s="${trace_id}"} | x=${release}`, `"\${service}"`, `"${foo"} | x=${service} | y="z"`, "{a=\"b\"} # \"\n | x=${service} # \"", "{a=\"b\"} # ${service}"} {
+	for _, q := range []string{"{s=`${service}`}", "| status >= ${tag:min}", `"${service}`, "`\"${service}\"`", `{s="${trace_id}"} | x=${release}`, `"\${service}"`, `"${foo"} | x=${service} | y="z"`, "{a=\"b\"} # \"\n | x=${service} # \"", "{a=\"b\"} # ${service}", "{a=\"b\"} # ${tag:k\n} \"\n| x=${service} | y=\"z\"",
+		`{a="b"} /* " */ | x=${service} | y="z"`, "{a=\"b\"} /* \"\n */ | x=${service} | y=\"z\"", `{a="b"} // "${service}"`,
+		`{a="b"} /* "${service}" */`, `{a="b"} // ${service}`, `{a="b"} /* ${service}`, "{a=\"b\"} /*\n${service}\n*/"} {
 		if _, invalid = parseLinkSettings(json.RawMessage(`{"logsQuery":` + strconv.Quote(q) + `}`)); invalid != msgLogsQueryQuotes {
 			t.Fatalf("query %s: invalid = %q", q, invalid)
 		}
@@ -78,6 +83,10 @@ func TestRenderLogsQuery(t *testing.T) {
 	}
 	if got = renderLogsQuery("${environment}|${release}|${tag:missing}|${tag:}", logsVars{}); got != "|||" {
 		t.Fatalf("missing = %q", got)
+	}
+
+	if got = renderLogsQuery("\"${tag:a\nb}\"", full); got != "\"${tag:a\nb}\"" {
+		t.Fatalf("across a line = %q", got)
 	}
 
 	hostile := "a\"} |= \"x\\"

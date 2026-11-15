@@ -9,7 +9,7 @@ import {
   ScopedVars,
   TimeRange,
 } from '@grafana/data';
-import { DataSourceWithBackend, getTemplateSrv } from '@grafana/runtime';
+import { config, DataSourceWithBackend, getTemplateSrv } from '@grafana/runtime';
 import { lastValueFrom, map, Observable } from 'rxjs';
 import { eventRows } from './eventRows';
 import { issueRows } from './issueRows';
@@ -25,20 +25,41 @@ import {
   IssueList,
   IssueTags,
   Project,
+  TriageAction,
 } from './types';
 
 const APP_ID = 'ahmedismail-bugsink-app';
 const ISSUES_FAILED = 'The issues could not be loaded.';
 const EVENTS_FAILED = 'The events could not be loaded.';
 const QUIET = { showErrorAlert: false };
+const ISSUE_ID = /^[A-Za-z0-9_-]{1,100}$/;
+
+export function isIssueId(id: string): boolean {
+  return ISSUE_ID.test(id);
+}
+
+function issuePath(id: string): string {
+  if (!isIssueId(id)) {
+    throw new Error(`"${id}" is not an issue id.`);
+  }
+  return `issues/${id}`;
+}
 
 function failureMessage(error: { message?: string; data?: { message?: string } }, fallback: string): string {
   return error.message || error.data?.message || fallback;
 }
 
 export class BugsinkDataSource extends DataSourceWithBackend<BugsinkQuery, BugsinkOptions> {
+  readonly triageEnabled: boolean;
+
   constructor(instanceSettings: DataSourceInstanceSettings<BugsinkOptions>) {
     super(instanceSettings);
+    this.triageEnabled = instanceSettings.jsonData?.triageEnabled === true;
+  }
+
+  canTriage(): boolean {
+    const role = config.bootData.user.orgRole;
+    return this.triageEnabled && (role === 'Editor' || role === 'Admin');
   }
 
   getDefaultQuery(): Partial<BugsinkQuery> {
@@ -63,20 +84,27 @@ export class BugsinkDataSource extends DataSourceWithBackend<BugsinkQuery, Bugsi
     return this.getResource('projects', undefined, QUIET);
   }
 
-  getIssue(id: string): Promise<IssueDetail> {
-    return this.getResource(`issues/${encodeURIComponent(id)}`, undefined, QUIET);
+  async getIssue(id: string): Promise<IssueDetail> {
+    return this.getResource(issuePath(id), undefined, QUIET);
   }
 
   getEvent(id: string): Promise<EventDetail> {
     return this.getResource(`events/${encodeURIComponent(id)}`, undefined, QUIET);
   }
 
-  getIssueTags(id: string): Promise<IssueTags> {
-    return this.getResource(`issues/${encodeURIComponent(id)}/tags`, undefined, QUIET);
+  async getIssueTags(id: string): Promise<IssueTags> {
+    return this.getResource(`${issuePath(id)}/tags`, undefined, QUIET);
   }
 
-  getIssueHistory(id: string): Promise<IssueHistory> {
-    return this.getResource(`issues/${encodeURIComponent(id)}/history`, undefined, QUIET);
+  async getIssueHistory(id: string): Promise<IssueHistory> {
+    return this.getResource(`${issuePath(id)}/history`, undefined, QUIET);
+  }
+
+  async triage(id: string, action: TriageAction): Promise<IssueDetail> {
+    return this.postResource(`${issuePath(id)}/${action}`, undefined, {
+      ...QUIET,
+      headers: { 'X-Bugsink-Triage': '1' },
+    });
   }
 
   async listIssues(query: BugsinkQuery, range: TimeRange): Promise<IssueList> {
