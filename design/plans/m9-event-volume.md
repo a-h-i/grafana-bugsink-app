@@ -346,15 +346,15 @@ export function SparklineCell({ id }: { id: string }): React.JSX.Element; // rea
 6. Ruling: the sparkline shows the last 24 hours as the 23 full hours plus the current one, which is Bugsink's own default window.
 7. Ruling: at most 4 sparkline queries are in flight per data source, the count cache lasts one minute, and Refresh does not reload the charts.
 8. Ruling: there is no backend limit on concurrent Bugsink calls yet, and identical concurrent cache misses are not merged (8 parallel cold queries make 1 to 8 calls).
-9. A range of 90 days or more, the `Last 90 days` preset included, shows the 90-day warning, because the aligned start falls one step before the oldest hour kept.
+9. A range whose start, rounded down to its step, is older than the oldest hour Bugsink keeps (90 days before the end of the current hour) shows the 90-day warning: every range of 90 days or more, the `Last 90 days` preset included, and some a little shorter.
 10. A project series also reads the project list (cached 15 seconds) for its name; an empty window or a cache hit makes no `event-counts` call.
 11. The limiter frees the slot of an aborted running task one microtask later, so that when a page's cells abort in one pass their queued neighbours are removed before a slot frees; a task that throws synchronously frees its slot, and an already aborted signal never starts the task.
-12. Paging with 30 rows now sends 25 queries to Grafana, not 50; the queries the old limiter started before cancelling them never reached the network.
+12. With 30 rows, page 1 sends 25 volume queries and page 2 sends 5 more, 30 in all; the queries the old limiter started before cancelling them never reached the network.
 13. Measured load: a page of 25 rows makes 25 `event-counts` calls cold and none within a minute; a page change while 4 run aborts those 4 and sends 25.
 14. Grafana cancelling the plugin's context when the browser aborts a request is inferred from the mechanism and was not seen live.
-15. Every sparkline state sits in one 120 by 24 box and has a text alternative: the loading and `No events` states are images, not live regions, the failure icon is reachable by keyboard, and the chart has a tooltip with the total.
+15. Every sparkline state sits in one 120 by 24 box and has a text alternative: the loading and `No events` states are images, not live regions, the failure icon is reachable by keyboard, and the chart's native `title` gives the total (since M10, so the chart is not a tab stop).
 16. A chart is built once per answer, so a triage action does not rebuild the 25 charts; `IssueTableContext` lives in its own file with a hook that throws outside a table.
-17. The issue list's triage behaviour is unchanged: a succeeded or failed action restarts no sparkline, and a cancelled list read shows no message; both are pinned at page level.
+17. The issue list's triage behaviour is unchanged: a succeeded or failed action restarts no sparkline (pinned at page level), and a cancelled list read shows no message (its test was rewritten in M10 so that it can fail).
 18. The end-to-end limit test records the highest number of queries held at once and needs more than four issues in the list, failing with a message that names `scripts/verify_stack.py` when it has fewer; the dashboard test asserts the answer carries no notices.
 19. Left for later milestones:
     * M10: a debug log of refused counts; a backend limit on concurrent Bugsink calls and merging of identical misses, since alert rules evaluate in parallel; the warning when a step is wider than 90 days; whether a cut of less than one step should warn.

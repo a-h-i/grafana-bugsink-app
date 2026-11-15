@@ -4,6 +4,7 @@ package plugin
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 	"time"
@@ -234,18 +235,23 @@ func (d *Datasource) eventCounts(ctx context.Context, q volumeQuery, w volumeWin
 	if w.ToNow {
 		end = time.Time{}
 	}
-	var (
-		counts []bugsink.EventCount
-		err    error
-	)
-	if q.Issue != "" {
-		counts, err = d.client.IssueEventCounts(ctx, q.Issue, w.Start, end)
-	} else {
-		counts, err = d.client.ProjectEventCounts(ctx, q.ProjectID, w.Start, end)
-	}
-	if err != nil {
-		return nil, err
-	}
-	d.countCache.set(key, counts)
-	return counts, nil
+	return d.countFlight.do(ctx, key, func(ctx context.Context) ([]bugsink.EventCount, error) {
+		var (
+			counts []bugsink.EventCount
+			err    error
+		)
+		if q.Issue != "" {
+			counts, err = d.client.IssueEventCounts(ctx, q.Issue, w.Start, end)
+		} else {
+			counts, err = d.client.ProjectEventCounts(ctx, q.ProjectID, w.Start, end)
+		}
+		if err != nil {
+			if errors.Is(err, bugsink.ErrNotBugsink) {
+				backend.Logger.FromContext(ctx).Debug("Event counts refused", "reason", err.Error())
+			}
+			return nil, err
+		}
+		d.countCache.set(key, counts)
+		return counts, nil
+	})
 }

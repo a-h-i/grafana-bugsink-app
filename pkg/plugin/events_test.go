@@ -3,13 +3,16 @@
 package plugin
 
 import (
+	"context"
 	"fmt"
+	"net/http"
 	"net/url"
 	"reflect"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/grafana/grafana-plugin-sdk-go/backend"
 	"github.com/grafana/grafana-plugin-sdk-go/data"
 )
@@ -380,5 +383,44 @@ func TestEventLookupCarriesPayloadTraceID(t *testing.T) {
 	}
 	if n := f.requestCount(); n != 3 {
 		t.Fatalf("%d Bugsink requests, want the lookup, the issue and the project list: %v", n, f.paths)
+	}
+}
+
+func TestEventLookupErrorHoldsNoTokenFromTheAnswer(t *testing.T) {
+	f := newFakeBugsink(t)
+	f.lookupBody = eventAt(defaultEventID, defaultEventSDKID, secretToken, olderThanRange)
+	rs := newRecordingServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/canonical/0/issues/"+secretToken+"/" {
+			if conn, _, err := w.(http.Hijacker).Hijack(); err == nil {
+				_ = conn.Close()
+			}
+			return
+		}
+		f.serve(w, r)
+	})
+	ds := newInstance(t, rs.srv.URL, secretToken, `{"browserUrl":"http://b"}`)
+	_, err := ds.events(context.Background(), eventsQuery{ProjectID: 1, EventID: uuid.MustParse(defaultEventSDKID)})
+	if err == nil || strings.Contains(strings.ToLower(err.Error()), strings.ToLower(secretToken)) {
+		t.Fatalf("error %v, want an error without the token", err)
+	}
+	if seen := rs.requests(); len(seen) < 2 || seen[1].path != "/api/canonical/0/issues/"+secretToken+"/" {
+		t.Fatalf("requests %v, want the lookup, then the issue read", seen)
+	}
+}
+
+func TestEventLookupAnswerWithoutAnIssueID(t *testing.T) {
+	for _, issue := range []string{"", "..", "a/b", "x y", "X-1?q=1", strings.Repeat("a", 101)} {
+		t.Run(issue, func(t *testing.T) {
+			f := newFakeBugsink(t)
+			f.lookupBody = eventAt(defaultEventID, defaultEventSDKID, issue, olderThanRange)
+			r := runQuery(t, f.datasource(t), `{"queryType":"events","eventId":"426ac644fafb475d905046d654730f1b","project":1}`)
+			want := "The answer did not look like a Bugsink API."
+			if r.Error == nil || r.Error.Error() != want || r.Status != backend.StatusBadGateway {
+				t.Fatalf("got %v status %d, want %q 502", r.Error, r.Status, want)
+			}
+			if n := f.requestCount(); n != 1 {
+				t.Fatalf("%d Bugsink requests, want only the lookup: %v", n, f.paths)
+			}
+		})
 	}
 }

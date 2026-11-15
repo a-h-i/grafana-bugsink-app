@@ -204,14 +204,21 @@ Built; see [`plans/m9-event-volume.md`](plans/m9-event-volume.md).
 
 ### M10: Alerting
 
-* **Scope:** `alerting: true`; new issues per interval from `first_seen`; current-value queries
-  (open-issue count, issues seen in the last N minutes, event count of the current hour); documentation
-  of the hourly-resolution limit. The open-issue count pages through the issue list (250 per page, no
-  count field), capped at a fixed number of pages and cached for a short time; a count field is
-  requested from Bugsink upstream.
-* **Demo:** an alert rule that fires when a project's event count in the current hour passes a
-  threshold, and one that fires when open issues exceed a number; both fire after the sample app
-  produces errors.
+Built; see [`plans/m10-alerting.md`](plans/m10-alerting.md).
+
+* **Scope:** `alerting: true`; the `New issues` query (issues per step from `first_seen`, zero-filled) and two
+  current-value queries, `Issue count` (by state, project and search, optionally seen in the last N minutes) and
+  `Event count` (Bugsink's hour in progress plus up to 23 hours before it), each one number a Threshold reads
+  directly, labelled by ids; documentation of the hourly-resolution limit and the top of the hour. Counts page
+  through the issue list (250 per page, no count field) up to 20 pages, past which they are an error, and are
+  cached for 15 seconds (issue lists) or 60 seconds (event counts); asking Bugsink upstream for a count field is
+  left to the owner. At most 8 Bugsink requests per data source wait at once, identical concurrent reads share one call,
+  and Bugsink's forwarded text never carries the token. The dashboard `Bugsink current values` shows the three
+  types; no alert rule is provisioned.
+* **Demo:** an alert rule that fires when a project's event count over the last two hours passes a threshold,
+  and one that fires when open issues matching a search exceed a number; both fire on the events the stack has
+  received, a twin with a high threshold stays Normal, and a refused query puts its rule in Error. The
+  end-to-end tests make these rules through Grafana's provisioning API and delete them.
 
 ### M11: Release
 

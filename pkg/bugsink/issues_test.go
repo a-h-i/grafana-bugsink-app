@@ -31,11 +31,14 @@ func page(next string, issues ...string) string {
 	return fmt.Sprintf(`{"next":%s,"previous":null,"results":[%s]}`, n, strings.Join(issues, ","))
 }
 
+// testToken is shaped like a Bugsink token: 40 hexadecimal characters.
+const testToken = "0123456789abcdef0123456789abcdef01234567"
+
 func newTestClient(t *testing.T, h http.HandlerFunc) *Client {
 	t.Helper()
 	srv := httptest.NewServer(h)
 	t.Cleanup(srv.Close)
-	c, err := New(srv.URL, "tok", nil)
+	c, err := New(srv.URL, testToken, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -9,8 +9,10 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"reflect"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -28,6 +30,8 @@ type fakeCounts struct {
 	projectsStatus int
 	echoAuth       bool
 	delay          time.Duration
+	gate           chan struct{} // when set, event-counts requests wait for it to close
+	held, maxHeld  atomic.Int64
 	srv            *httptest.Server
 }
 
@@ -51,7 +55,15 @@ func (f *fakeCounts) serve(w http.ResponseWriter, r *http.Request) {
 	if isCounts {
 		f.counts = append(f.counts, r.URL.Query())
 	}
+	gate := f.gate
 	f.mu.Unlock()
+	if gate != nil && isCounts {
+		n := f.held.Add(1)
+		for m := f.maxHeld.Load(); n > m && !f.maxHeld.CompareAndSwap(m, n); m = f.maxHeld.Load() {
+		}
+		<-gate
+		f.held.Add(-1)
+	}
 	if delay > 0 {
 		time.Sleep(delay)
 	}
@@ -81,6 +93,9 @@ func countsAnswer(q url.Values) string {
 	end := time.Date(2026, 11, 15, 14, 0, 0, 0, time.UTC)
 	if e := q.Get("end"); e != "" {
 		end, _ = time.Parse(time.RFC3339, e)
+	}
+	if q.Get("start") == "" {
+		start = end.Add(-24 * time.Hour)
 	}
 	var buckets []string
 	for h := start; h.Before(end); h = h.Add(time.Hour) {
@@ -486,4 +501,108 @@ func TestVolumeProjectNameUnreadable(t *testing.T) {
 	if frame.Name != "1" || frame.Fields[1].Labels["project"] != "1" || frame.Fields[1].Config.DisplayNameFromDS != "1" {
 		t.Fatalf("name %q labels %v", frame.Name, frame.Fields[1].Labels)
 	}
+}
+
+func TestIdenticalColdQueriesShareOneCall(t *testing.T) {
+	const parallel = 8
+	runAll := func(ds *Datasource, run func() backend.DataResponse, release func(), shared func() int) []backend.DataResponse {
+		results := make([]backend.DataResponse, parallel)
+		var wg sync.WaitGroup
+		for i := range results {
+			wg.Add(1)
+			go func() { defer wg.Done(); results[i] = run() }()
+		}
+		eventually(t, "7 callers sharing one call", func() bool { return shared() == parallel-1 })
+		release()
+		wg.Wait()
+		return results
+	}
+	assertEqualFrames := func(t *testing.T, results []backend.DataResponse) {
+		t.Helper()
+		want := frameOf(t, results[0])
+		for _, r := range results[1:] {
+			if !reflect.DeepEqual(want, frameOf(t, r)) {
+				t.Fatal("frames differ")
+			}
+		}
+	}
+
+	t.Run("volume", func(t *testing.T) {
+		f := newFakeCounts(t)
+		f.gate = make(chan struct{})
+		ds := f.datasource(t)
+		results := runAll(ds, func() backend.DataResponse {
+			return sevenDays(t, ds, `{"queryType":"volume","project":1}`, time.Hour)
+		}, func() { close(f.gate) }, ds.countFlight.totalDups)
+		assertEqualFrames(t, results)
+		if n := len(f.countRequests()); n != 1 {
+			t.Fatalf("%d event-counts requests, want 1", n)
+		}
+	})
+	t.Run("issues", func(t *testing.T) {
+		f := newFakeBugsink(t)
+		f.pages = []string{issueAt("A-1", rangeTo.Add(-time.Hour))}
+		f.issuesGate = make(chan struct{})
+		ds := f.datasource(t)
+		results := runAll(ds, func() backend.DataResponse {
+			return runQuery(t, ds, `{"queryType":"issues"}`)
+		}, func() { close(f.issuesGate) }, ds.issueFlight.totalDups)
+		assertEqualFrames(t, results)
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		if len(f.requests) != 1 {
+			t.Fatalf("%d issue list requests, want 1", len(f.requests))
+		}
+	})
+}
+
+func TestInstanceLimitsConcurrentCalls(t *testing.T) {
+	const queries = 20
+	f := newFakeCounts(t)
+	f.gate = make(chan struct{})
+	ds := f.datasource(t)
+	results := make([]backend.DataResponse, queries)
+	var wg sync.WaitGroup
+	for i := range results {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			results[i] = sevenDays(t, ds, fmt.Sprintf(`{"queryType":"volume","issue":"A-%d"}`, i), time.Hour)
+		}()
+	}
+	eventually(t, "8 requests held", func() bool { return f.held.Load() == maxConcurrentCalls })
+	time.Sleep(50 * time.Millisecond)
+	if m := f.maxHeld.Load(); m != maxConcurrentCalls {
+		t.Fatalf("Bugsink held %d requests at once, want %d", m, maxConcurrentCalls)
+	}
+	close(f.gate)
+	wg.Wait()
+	for i, r := range results {
+		if r.Error != nil {
+			t.Fatalf("query %d: %v", i, r.Error)
+		}
+	}
+}
+
+func TestRefusedCountsAreLogged(t *testing.T) {
+	logs := captureLogs(t)
+	f := newFakeCounts(t)
+	f.status, f.body = 200, `{"start":"2026-11-14T14:00:00Z","end":"2026-11-15T14:00:00Z","interval_seconds":86400,"buckets":[]}`
+	r := sevenDays(t, f.datasource(t), `{"queryType":"volume","project":1}`, time.Hour)
+	if r.Error == nil || r.Error.Error() != "The answer did not look like a Bugsink API." || r.Status != backend.StatusBadGateway {
+		t.Fatalf("panel message %v status %d", r.Error, r.Status)
+	}
+	var reasons []string
+	for _, l := range logs.all() {
+		if l.msg == "Event counts refused" {
+			if l.level != "debug" || len(l.args) != 2 || l.args[0] != "reason" {
+				t.Fatalf("log line %s", l)
+			}
+			reasons = append(reasons, fmt.Sprint(l.args[1]))
+		}
+	}
+	if len(reasons) != 1 || !strings.Contains(reasons[0], "are not hourly") {
+		t.Fatalf("refused-count lines %v, want one holding %q", reasons, "are not hourly")
+	}
+	logs.assertNoToken(t)
 }

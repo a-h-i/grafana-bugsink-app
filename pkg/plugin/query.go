@@ -27,6 +27,8 @@ type queryModel struct {
 	Order     string          `json:"order"`
 	Issue     string          `json:"issue"`
 	EventID   string          `json:"eventId"`
+	Minutes   json.RawMessage `json:"minutes"`
+	Hours     json.RawMessage `json:"hours"`
 }
 
 // QueryData answers every query of the request on its own.
@@ -52,6 +54,12 @@ func (d *Datasource) query(ctx context.Context, q backend.DataQuery) backend.Dat
 		resp = d.queryEvents(ctx, m, project)
 	case queryTypeVolume:
 		resp = d.queryVolume(ctx, q, m, project)
+	case queryTypeNewIssues:
+		resp = d.queryNewIssues(ctx, q, m, project)
+	case queryTypeIssueCount:
+		resp = d.queryIssueCount(ctx, m, project)
+	case queryTypeEventCount:
+		resp = d.queryEventCount(ctx, m, project)
 	default:
 		resp = d.queryIssues(ctx, q, m, project)
 	}
@@ -117,7 +125,7 @@ func parseModel(q backend.DataQuery) (m queryModel, project int, invalid string)
 	if m.QueryType == "" {
 		m.QueryType = q.QueryType
 	}
-	if m.QueryType != "" && !slices.Contains([]string{queryTypeIssues, queryTypeEvents, queryTypeVolume}, m.QueryType) {
+	if m.QueryType != "" && !slices.Contains([]string{queryTypeIssues, queryTypeEvents, queryTypeVolume, queryTypeIssueCount, queryTypeEventCount, queryTypeNewIssues}, m.QueryType) {
 		return m, 0, fmt.Sprintf("Unknown queryType %q.", m.QueryType)
 	}
 	return m, project, ""
@@ -167,20 +175,23 @@ func parseProject(raw json.RawMessage) (int, error) {
 	return strconv.Atoi(string(raw))
 }
 
-// issueList returns the issues for the filter, from the cache when its list reaches back to from; a list read across a clear is not stored.
+// issueList returns the issues for the filter, from the cache when its list reaches back to from; a list read across a clear is not stored or shared with a later caller.
 func (d *Datasource) issueList(ctx context.Context, f bugsink.IssueFilter, from time.Time) (bugsink.IssueList, error) {
 	if cached, ok := d.issueCache.get(filterKey(f)); ok && (cached.SeenSince.IsZero() || !cached.SeenSince.After(from)) {
 		return cached, nil
 	}
 	gen := d.issueCache.generation()
-	list, err := d.client.ListIssues(ctx, f, from)
-	if err != nil {
-		return bugsink.IssueList{}, err
-	}
-	if !list.Truncated {
-		d.issueCache.setIfGeneration(filterKey(f), list, gen)
-	}
-	return list, nil
+	key := fmt.Sprintf("%s|%d|%d", filterKey(f), from.UnixNano(), gen)
+	return d.issueFlight.do(ctx, key, func(ctx context.Context) (bugsink.IssueList, error) {
+		list, err := d.client.ListIssues(ctx, f, from)
+		if err != nil {
+			return bugsink.IssueList{}, err
+		}
+		if !list.Truncated {
+			d.issueCache.setIfGeneration(filterKey(f), list, gen)
+		}
+		return list, nil
+	})
 }
 
 func filterKey(f bugsink.IssueFilter) string {
@@ -198,12 +209,14 @@ func (d *Datasource) projects(ctx context.Context) ([]bugsink.Project, error) {
 	if cached, ok := d.projectCache.get(""); ok {
 		return cached.projects, cached.err
 	}
-	projects, err := d.client.ListProjects(ctx)
-	if isTimeout(err) {
-		return nil, err
-	}
-	d.projectCache.set("", projectsResult{projects: projects, err: err})
-	return projects, err
+	res, err := d.projectFlight.do(ctx, "", func(ctx context.Context) (projectsResult, error) {
+		projects, err := d.client.ListProjects(ctx)
+		if !isTimeout(err) {
+			d.projectCache.set("", projectsResult{projects: projects, err: err})
+		}
+		return projectsResult{projects: projects, err: err}, err
+	})
+	return res.projects, err
 }
 
 // projectNames maps project ids to names; it is empty when the project list cannot be read.

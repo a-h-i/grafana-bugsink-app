@@ -6,6 +6,7 @@ package bugsink
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -46,12 +47,16 @@ func New(baseURL, token string, httpClient *http.Client) (*Client, error) {
 	}
 	noRedirects := *httpClient
 	noRedirects.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	noRedirects.Transport = redactingTransport{next: httpClient.Transport}
+	if httpClient.Transport == nil {
+		noRedirects.Transport = redactingTransport{next: http.DefaultTransport}
+	}
 	u.RawQuery, u.Fragment = "", ""
 	u.Path = strings.TrimSuffix(strings.TrimSuffix(u.Path, "/"), apiPath)
 
 	c := &Client{authHeader: "Bearer " + token, baseURL: u.String()}
 	c.gen, err = gen.NewClient(u.String(),
-		gen.WithHTTPClient(&noRedirects),
+		gen.WithHTTPClient(queryHidingDoer{&noRedirects}),
 		gen.WithRequestEditorFn(func(_ context.Context, req *http.Request) error {
 			req.Header.Set("Authorization", c.authHeader)
 			return nil
@@ -173,5 +178,74 @@ func decodeJSON(resp *http.Response, out any) error {
 
 func readAPIError(resp *http.Response) error {
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, maxBodyBytes))
-	return newAPIError(resp.StatusCode, body)
+	var token string
+	if resp.Request != nil {
+		token = tokenOf(resp.Request)
+	}
+	return newAPIError(resp.StatusCode, body, token)
+}
+
+// tokenOf is the request's Authorization header without "Bearer ".
+func tokenOf(req *http.Request) string {
+	return strings.TrimPrefix(req.Header.Get("Authorization"), "Bearer ")
+}
+
+// queryHidingDoer replaces the URL in a request's url.Error by the request's scheme, host and path, made forwardable.
+type queryHidingDoer struct{ client *http.Client }
+
+func (d queryHidingDoer) Do(req *http.Request) (*http.Response, error) {
+	resp, err := d.client.Do(req)
+	var urlErr *url.Error
+	if errors.As(err, &urlErr) {
+		return resp, &url.Error{Op: urlErr.Op, URL: forwardableURL(req.URL, tokenOf(req)), Err: urlErr.Err}
+	}
+	return resp, err
+}
+
+// forwardableURL is u's scheme, host and path with token redacted, also in its path-escaped form, and cut to maxDetailChars.
+func forwardableURL(u *url.URL, token string) string {
+	bare := url.URL{Scheme: u.Scheme, Host: u.Host, Path: u.Path}
+	escaped := (&url.URL{Path: token}).EscapedPath()
+	return forwardable(redact(bare.String(), escaped), token)
+}
+
+// redactingTransport makes every error of a request and of reading or closing its answer forwardable, and drops the answer's Location, which net/http quotes when it cannot parse it.
+type redactingTransport struct{ next http.RoundTripper }
+
+func (t redactingTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	token := tokenOf(req)
+	resp, err := t.next.RoundTrip(req)
+	if err != nil {
+		return resp, forwardableError(err, token)
+	}
+	resp.Header.Del("Location")
+	if resp.Body != nil {
+		resp.Body = redactingBody{ReadCloser: resp.Body, token: token}
+	}
+	return resp, nil
+}
+
+type redactingBody struct {
+	io.ReadCloser
+	token string
+}
+
+func (b redactingBody) Read(p []byte) (int, error) {
+	n, err := b.ReadCloser.Read(p)
+	return n, forwardableError(err, b.token)
+}
+
+func (b redactingBody) Close() error {
+	return forwardableError(b.ReadCloser.Close(), b.token)
+}
+
+// forwardableError is err, or a new error with err's forwardable text when the text holds token or is too long.
+func forwardableError(err error, token string) error {
+	if err == nil {
+		return nil
+	}
+	if text := forwardable(err.Error(), token); text != err.Error() {
+		return errors.New(text)
+	}
+	return err
 }

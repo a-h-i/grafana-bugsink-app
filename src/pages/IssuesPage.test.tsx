@@ -342,13 +342,14 @@ describe('IssuesPage', () => {
   });
 
   it('shows no message when the list read it cancelled rejects', async () => {
+    let resolveSecond: (value: unknown) => void = () => {};
     mockSources.bugsink.listIssues.mockImplementation(
       (_query: unknown, _range: unknown, signal: AbortSignal) =>
         new Promise((resolve, reject) => {
           if (mockSources.bugsink.listIssues.mock.calls.length === 1) {
             signal.addEventListener('abort', () => reject(Object.assign(new Error('aborted'), { name: 'AbortError' })));
           } else {
-            resolve({ rows: [row('u2', 'MUTED-1')] });
+            resolveSecond = resolve;
           }
         })
     );
@@ -357,6 +358,12 @@ describe('IssuesPage', () => {
     await screen.findByRole('combobox', { name: 'State' });
 
     await pick('State', 'Muted');
+
+    await waitFor(() => expect(mockSources.bugsink.listIssues).toHaveBeenCalledTimes(2));
+    await act(async () => {});
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+
+    await act(async () => resolveSecond({ rows: [row('u2', 'MUTED-1')] }));
 
     expect(await screen.findByText('MUTED-1')).toBeInTheDocument();
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();

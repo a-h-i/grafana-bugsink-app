@@ -8,6 +8,8 @@ interface Props {
   datasource: BugsinkDataSource;
   value?: number;
   onChange: (project?: number) => void;
+  emptyLabel?: string;
+  description?: string;
 }
 
 const ALL_PROJECTS = 0;
@@ -17,24 +19,21 @@ function errorMessage(error: unknown): string {
   return message || 'Could not load the projects.';
 }
 
-function projectOptions(projects: Project[], selected: number): Array<ComboboxOption<number>> {
+function projectOptions(projects: Project[], selected: number, emptyLabel: string): Array<ComboboxOption<number>> {
   const sorted = [...projects].sort((a, b) => a.name.localeCompare(b.name));
-  const options = [
-    { value: ALL_PROJECTS, label: 'All projects' },
-    ...sorted.map((p) => ({ value: p.id, label: p.name })),
-  ];
+  const options = [{ value: ALL_PROJECTS, label: emptyLabel }, ...sorted.map((p) => ({ value: p.id, label: p.name }))];
   if (selected !== ALL_PROJECTS && !projects.some((p) => p.id === selected)) {
     options.push({ value: selected, label: `Project ${selected}` });
   }
   return options;
 }
 
-export function ProjectPicker({ datasource, value, onChange }: Props) {
+export function ProjectPicker({ datasource, value, onChange, emptyLabel = 'All projects', description }: Props) {
   const [loaded, setLoaded] = useState<{ source: BugsinkDataSource; projects: Project[]; error?: string }>();
   const current = loaded?.source === datasource ? loaded : undefined;
   const projects = useMemo(() => current?.projects ?? [], [current]);
   const selected = value || ALL_PROJECTS;
-  const options = useMemo(() => projectOptions(projects, selected), [projects, selected]);
+  const options = useMemo(() => projectOptions(projects, selected, emptyLabel), [projects, selected, emptyLabel]);
 
   useEffect(() => {
     let active = true;
@@ -48,7 +47,7 @@ export function ProjectPicker({ datasource, value, onChange }: Props) {
   }, [datasource]);
 
   return (
-    <Field label="Project" invalid={Boolean(current?.error)} error={current?.error}>
+    <Field label="Project" description={description} invalid={Boolean(current?.error)} error={current?.error}>
       <Combobox
         aria-label="Project"
         width={30}

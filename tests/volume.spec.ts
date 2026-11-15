@@ -1,41 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-import type { APIRequestContext, Locator, Page, Request, Route } from '@playwright/test';
-import { expect, test } from './fixtures';
-import { readReported } from './reported';
-import { BUGSINK_API, EVENT_MARKER, GLOBAL_READ } from './seeded';
-
-type Issue = { id: string; friendlyId: string };
+import type { Locator, Page, Request, Route } from '@playwright/test';
+import { expect, test, thisRunsIssue, type Issue } from './fixtures';
+import { EVENT_MARKER } from './seeded';
 
 const VOLUME_COLUMN = 7;
 const SPARKLINE_LIMIT = 4;
 const SPARKLINE_NAME = /^[1-9]\d* events in the last 24 hours$/;
 const LOADING = 'Loading the last 24 hours';
 
-const bearer = { Authorization: `Bearer ${GLOBAL_READ}` };
 const listParams = (extra = '') => new URLSearchParams(`ds=bugsink&project=1&state=all${extra}&from=now-24h&to=now`);
-
-async function thisRunsIssue(bugsink: APIRequestContext): Promise<Issue> {
-  const { eventId } = readReported<{ eventId: string }>('trace');
-  let issue: Issue | undefined;
-  await expect(async () => {
-    const issues = await bugsink.get(
-      `${BUGSINK_API}/issues/?project=1&state=all&q=${EVENT_MARKER}&sort=last_seen&order=desc`,
-      { headers: bearer }
-    );
-    expect(issues.ok()).toBe(true);
-    const found: Issue[] = [];
-    for (const candidate of (await issues.json()).results) {
-      const events = await bugsink.get(`${BUGSINK_API}/events/?issue=${candidate.id}&order=desc`, { headers: bearer });
-      expect(events.ok()).toBe(true);
-      if ((await events.json()).results[0]?.event_id.replaceAll('-', '') === eventId) {
-        found.push({ id: candidate.id, friendlyId: candidate.friendly_id });
-      }
-    }
-    expect(found, "an issue whose newest event is this run's").toHaveLength(1);
-    issue = found[0];
-  }).toPass();
-  return issue!;
-}
 
 function volumeCounts(body: {
   results: Record<string, { error?: string; frames?: Array<{ data: { values: number[][] } }> }>;

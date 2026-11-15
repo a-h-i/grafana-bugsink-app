@@ -221,7 +221,7 @@ In a dashboard or Explore table, the Issue column carries the link `Open in Bugs
 
 ## Querying events
 
-In the query editor of a panel or Explore, the `Query type` picker chooses `Issues` or `Events`. The app's list page has no picker: it queries issues only.
+In the query editor of a panel or Explore, the `Query type` picker chooses one of six types: `Issues`, `Events`, `Event volume`, `New issues`, `Issue count`, `Event count`. The app's list page has no picker: it queries issues only.
 
 An events query has one of three modes. It uses the first one that applies, in this order:
 
@@ -261,14 +261,73 @@ Bugsink counts events per hour, so the smallest step is one hour. A finer dashbo
 
 Steps are aligned to UTC, counted from 1970-01-01. A one-day step runs from midnight to midnight UTC whatever the dashboard's time zone. A seven-day step starts on a Thursday. Set the panel's minimum interval to `1h`, and prefer `1d` over `7d` steps.
 
+The series is labelled with the project name. For an alert rule, prefer `Event count`, which is labelled with the project id: a rename does not split the alert (see [Alerting](#alerting)).
+
 The current step is partial until it ends. Seven days at a one-hour step is 169 points.
 
 ### Limits
 
-- Bugsink keeps 90 days of hourly counts. A time range of 90 days or more (the `Last 90 days` preset included) is cut, and the panel shows the warning `Bugsink keeps hourly event counts for 90 days, so the series starts later than the time range.`
+- Bugsink keeps 90 days of hourly counts. A range whose start, rounded down to its step, is older than the oldest hour Bugsink keeps (90 days before the end of the current hour) is cut: every range of 90 days or more, the `Last 90 days` preset included, and some a little shorter. The panel shows the warning `Bugsink keeps hourly event counts for 90 days, so the series starts later than the time range.`
 - A time range entirely older than 90 days shows an empty chart with the same warning, and one in the future shows an empty chart.
 - Results can be up to 60 seconds old.
 - Each query makes at most one `event-counts` request (none for an empty time range or within a minute of the same query); a project's series also reads the project list for its name. A project needs a token that can read that project (`projects:read`). An issue needs `issues:read`. A token bound to one project that asks for another project is refused with Bugsink's own message.
+
+## Alerting
+
+The Bugsink data source can be chosen in Grafana's alert rule editor. Three query types suit alert rules. A new query in the rule editor starts as `Issues`, a table that alert rules cannot use: choose one of the three types.
+
+| Query type | Fields | Returns |
+| :--- | :--- | :--- |
+| `Issue count` | State, Project, Search and `Seen within (minutes)`. Minutes are optional, whole numbers from 1 to 1440. | One number: how many issues match. |
+| `Event count` | Project or Issue, and Hours (1 to 24, default 1). | One number: the events of the project or the issue in Bugsink's hour in progress plus up to 23 hours before it. |
+| `New issues` | Project, Search. | A series: the issues first seen per step. |
+
+An `Event count` needs a project or an issue. When both are set, the issue is used. With neither, the editor shows `An event count needs a project or an issue.` and the rule gets No data.
+
+Dashboard variables are not available in alert rules. A `$name` in a search is sent as written.
+
+### Reading the numbers
+
+- `Issue count` and `Event count` return one number. A Threshold accepts it directly: add no Reduce step.
+- `New issues` returns a series. Reduce it with `sum` (or `max`) over a short range, for example the last 10 minutes. Do not use `last`: the current step is still filling, and an issue first seen late in a step can be missed.
+- For `New issues`, choose a range longer than the evaluation interval plus a minute: an issue appears only once Bugsink has digested it, with its first-seen time, so a shorter range can miss it.
+- `Event volume` is a series too and needs a Reduce step. Its series is labelled with the project name; prefer `Event count` for alerts.
+- Numbers are labelled with the project id (`project_id`) or the issue (`issue`), never with names, so a rename does not split an alert.
+- The `issue` label is the issue as typed; the same issue typed as short id and as id gives two alert instances.
+- No matching issues or events is the number 0, not No data.
+
+### What a rule can rely on
+
+- Bugsink counts events per hour. `Event count` with `1` hour is the hour in progress, so it drops to zero at the top of every hour and a rule on it resolves then. Use `2` hours to avoid that, at the cost of a slower reset. A rule cannot react to a spike within minutes.
+- Event counts can be up to 60 seconds old. Issue counts and new issues can be up to 15 seconds old.
+- Counting issues means reading pages of Bugsink's issue list, because the list has no total count. A count over more than 5000 matching issues is an error, not a partial number, so the rule goes to Error rather than under-counting. Narrow an `Issue count` with a project, a state or a search, and `New issues` with a project or a search, or a shorter range.
+- A count that reads many pages from a slow Bugsink can exceed Grafana's 30-second evaluation timeout and put the rule in Error.
+- When Bugsink is unreachable or refuses the token, the rule goes to Error with the sentence shown in the query. Text from Bugsink in these errors is cut to 500 characters and never contains the API token.
+
+### Load on Bugsink
+
+- One evaluation makes at most one Bugsink call for an event count, and none within a minute of the last one while Bugsink's current hour is Grafana's; when their clocks disagree at the hour, every evaluation calls Bugsink.
+- One evaluation makes at most 20 list pages for an issue count or new issues, and none within 15 seconds for the same filter, unless more than 32 different filters were read in those 15 seconds or a triage action cleared the cache. A count past the 5000-issue limit is never cached, so every try of every evaluation reads all 20 pages again before failing.
+- Grafana tries a failing evaluation up to 3 times (`max_attempts = 3`), and each try calls Bugsink.
+- Each data source makes at most 8 Bugsink requests at once.
+- A minute is enough for an evaluation interval: shorter intervals mostly read the cache.
+
+### Recipes
+
+Alert on open issues in a project:
+
+1. Create an alert rule and choose the Bugsink data source.
+2. Query A: `Issue count`, State `Open`, Project `sample-python`.
+3. Add an expression `Threshold`, input A, `Is above` `10`.
+4. Set the evaluation interval to `1m`.
+
+Alert on a burst of events:
+
+1. Query A: `Event count`, Project `sample-python`, Hours `2`.
+2. Add an expression `Threshold`, input A, `Is above` `100`.
+3. Set `Keep firing for` to `1h` if you use Hours `1`, so the rule does not resolve at the top of the hour.
+
+The development stack provisions the dashboard `Bugsink current values`, which shows the values these rules read. The repository provisions no alert rules, contact points or notification policies. Grafana 13.3.1's default policy sends to a contact point `empty` with no integrations, and email is off, so a rule made on the stack notifies nobody unless you add a contact point.
 
 ## Trace and log links
 

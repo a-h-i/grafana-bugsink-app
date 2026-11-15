@@ -6,7 +6,7 @@ export type IssueState = 'all' | 'open' | 'unresolved' | 'resolved' | 'muted';
 export type IssueSort = 'last_seen' | 'digested_event_count' | 'digest_order';
 export type SortOrder = 'asc' | 'desc';
 
-export type QueryType = 'issues' | 'events' | 'volume';
+export type QueryType = 'issues' | 'events' | 'volume' | 'newIssues' | 'issueCount' | 'eventCount';
 
 export interface VolumeSeries {
   times: number[];
@@ -22,6 +22,8 @@ export interface BugsinkQuery extends DataQuery {
   q?: string;
   sort?: IssueSort;
   order?: SortOrder;
+  minutes?: number;
+  hours?: number;
 }
 
 export const DEFAULT_QUERY: Partial<BugsinkQuery> = {

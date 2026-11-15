@@ -60,7 +60,7 @@ func TestGetEventRequest(t *testing.T) {
 		Timestamp:  time.Date(2026, 11, 15, 4, 47, 36, 0, time.UTC),
 		IngestedAt: time.Date(2026, 11, 15, 4, 47, 37, 0, time.UTC),
 	}
-	if path != "/api/canonical/0/events/"+eventUUID+"/" || auth != "Bearer tok" || !reflect.DeepEqual(ev.Event, want) {
+	if path != "/api/canonical/0/events/"+eventUUID+"/" || auth != "Bearer "+testToken || !reflect.DeepEqual(ev.Event, want) {
 		t.Fatalf("path %q auth %q event %+v", path, auth, ev.Event)
 	}
 

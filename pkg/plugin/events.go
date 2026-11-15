@@ -108,6 +108,9 @@ func (d *Datasource) eventByID(ctx context.Context, q eventsQuery) (eventsResult
 		return eventsResult{}, err
 	}
 	event := detail.Event
+	if !validIssueID(event.IssueID) {
+		return eventsResult{}, fmt.Errorf("%w: the event's issue is not an issue id", bugsink.ErrNotBugsink)
+	}
 	issue, err := d.client.GetIssue(ctx, event.IssueID)
 	if err != nil {
 		return eventsResult{}, err

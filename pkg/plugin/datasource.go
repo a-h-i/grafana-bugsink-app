@@ -33,6 +33,9 @@ type Datasource struct {
 	projectCache       *cache[projectsResult]
 	eventCache         *cache[eventsResult]
 	countCache         *cache[[]bugsink.EventCount]
+	issueFlight        *flight[bugsink.IssueList]
+	countFlight        *flight[[]bugsink.EventCount]
+	projectFlight      *flight[projectsResult]
 	now                func() time.Time
 	resources          backend.CallResourceHandler
 }
@@ -61,6 +64,9 @@ func NewDatasource(ctx context.Context, s backend.DataSourceInstanceSettings) (i
 		projectCache:  newCache[projectsResult](cacheTTL, cacheMaxEntries),
 		eventCache:    newCache[eventsResult](cacheTTL, cacheMaxEntries),
 		countCache:    newCache[[]bugsink.EventCount](countCacheTTL, countCacheMaxEntries),
+		issueFlight:   newFlight[bugsink.IssueList](),
+		countFlight:   newFlight[[]bugsink.EventCount](),
+		projectFlight: newFlight[projectsResult](),
 		now:           time.Now,
 	}
 	d.settingsErr = d.configure(ctx, s)
@@ -81,6 +87,11 @@ func (d *Datasource) configure(ctx context.Context, s backend.DataSourceInstance
 	if err != nil {
 		return msgSettingsInvalid
 	}
+	transport := d.httpClient.Transport
+	if transport == nil {
+		transport = http.DefaultTransport
+	}
+	d.httpClient.Transport = limitTransport(transport, maxConcurrentCalls)
 	client, err := bugsink.New(s.URL, s.DecryptedSecureJSONData["apiToken"], d.httpClient)
 	switch {
 	case errors.Is(err, bugsink.ErrInvalidURL):

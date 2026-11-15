@@ -6,6 +6,7 @@
   "backend": true,
   "executable": "gpx_bugsink",
   "metrics": true,
+  "alerting": true,
   "info": {
     "keywords": ["datasource"],
     "description": "",

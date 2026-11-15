@@ -23,3 +23,7 @@
 - Event volume query: a project's or an issue's events per hour or per whole-hour step as a time series, up to 90 days.
 - `Last 24 hours` column in the issue list: one small chart per visible row, loaded at most four at a time.
 - The issue list cancels a load that a newer one supersedes.
+- Alerting: the data source can be chosen in Grafana's alert rule editor. New query types `Issue count`, `Event count` and `New issues` return current values and series that alert rules can read; a Threshold reads the two counts directly. Numbers are labelled with the project or issue id.
+- Request limit: each data source makes at most 8 Bugsink requests at once. An evaluation makes at most 1 call for an event count and 20 list pages for an issue count or new issues, and a count over 5000 matching issues is an error.
+- Text from Bugsink shown in errors is cut to 500 characters and never contains the API token.
+- The sparkline charts in the issue list are no longer in the tab order.

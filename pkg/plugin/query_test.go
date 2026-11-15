@@ -57,6 +57,7 @@ type fakeBugsink struct {
 	eventsEndless  bool                // every event page has a successor
 	eventsStatus   int                 // status of the event list, 0 for success
 	eventRequests  []url.Values
+	issuesGate     chan struct{} // when set, issue list requests wait for it to close
 	lookupRequests []url.Values
 	lookupStatus   int               // status of the event lookup, 0 for success
 	lookupBody     string            // body of the event lookup, or empty for a default event
@@ -101,7 +102,11 @@ func (f *fakeBugsink) serve(w http.ResponseWriter, r *http.Request) {
 	case "/api/canonical/0/issues/":
 		f.mu.Lock()
 		f.requests = append(f.requests, r.URL.Query())
+		gate := f.issuesGate
 		f.mu.Unlock()
+		if gate != nil {
+			<-gate
+		}
 		if f.issuesStatus != 0 {
 			w.WriteHeader(f.issuesStatus)
 			_, _ = fmt.Fprint(w, f.issuesBody)
@@ -519,6 +524,23 @@ func TestQueryErrors(t *testing.T) {
 			t.Fatalf("got %v status %d source %q", r.Error, r.Status, r.ErrorSource)
 		}
 	})
+
+	t.Run("connection closed after a cursor holding the token", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if !r.URL.Query().Has("cursor") {
+				_, _ = fmt.Fprintf(w, `{"next":"http://x/?cursor=%s","previous":null,"results":[]}`, secretToken)
+				return
+			}
+			if conn, _, err := w.(http.Hijacker).Hijack(); err == nil {
+				_ = conn.Close()
+			}
+		}))
+		t.Cleanup(srv.Close)
+		r := runQuery(t, newInstance(t, srv.URL, secretToken, ""), `{"queryType":"issueCount"}`)
+		if r.Error == nil || r.Error.Error() != "Cannot reach Bugsink: EOF." || r.Status != 502 {
+			t.Fatalf("got %v status %d", r.Error, r.Status)
+		}
+	})
 }
 
 func TestQuerySettingsError(t *testing.T) {
@@ -703,12 +725,16 @@ func TestQueryNeverWrites(t *testing.T) {
 		{"events", "", `{"queryType":"events","issue":"X-1"}`, "", false},
 		{"volume of an issue", "", `{"queryType":"volume","issue":"X-1"}`, "", true},
 		{"volume of a project", "volume", `{"project":1}`, "", true},
+		{"issue count", "", `{"queryType":"issueCount","project":1}`, "", false},
+		{"event count of a project", "", `{"queryType":"eventCount","project":1}`, "", true},
+		{"event count of an issue", "eventCount", `{"issue":"X-1"}`, "", true},
+		{"new issues", "", `{"queryType":"newIssues","project":1}`, "", false},
 	} {
 		t.Run(q.name, func(t *testing.T) {
 			req := &backend.QueryDataRequest{Queries: []backend.DataQuery{{
 				RefID: "A", QueryType: q.queryType, JSON: json.RawMessage(q.model),
 				TimeRange: backend.TimeRange{From: rangeFrom, To: rangeTo},
-			}}}
+			}}, PluginContext: backend.PluginContext{}, Headers: map[string]string{"FromAlert": "true"}}
 			before := countReads()
 			resp, err := ds.QueryData(context.Background(), req)
 			if err != nil {
@@ -720,7 +746,7 @@ func TestQueryNeverWrites(t *testing.T) {
 					t.Fatalf("error %v", r.Error)
 				}
 				if q.readsCounts && countReads() == before {
-					t.Fatal("the volume query read no event counts")
+					t.Fatal("the query read no event counts")
 				}
 				return
 			}

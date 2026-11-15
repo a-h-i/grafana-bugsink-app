@@ -113,6 +113,13 @@ values; the login form is disabled, so use them with basic authentication (`curl
 * `Bugsink event volume` (uid `bugsink-volume`, last 7 days): a time-series panel `Events per hour in sample-python`, drawn as
   bars, from the `Event volume` query of project 1 with a minimum interval of `1h`, so it opens without notices. The last bar
   is the hour in progress.
+* `Bugsink current values` (uid `bugsink-alerting`, last 7 days): three stat panels, `Open issues in sample-python`,
+  `Events in sample-python this hour` and `Issues seen in the last hour` (all projects), and a bar chart
+  `New issues per day in sample-python`, from the `Issue count`, `Event count` and `New issues` queries. These are the
+  values an alert rule reads. The repository provisions no alert rules, contact points or notification policies.
+  Grafana 13.3.1's default policy sends to a contact point `empty` with no integrations, and email is off, so a rule
+  made on the stack notifies nobody unless you add a contact point. The end-to-end tests make their rules in the folder
+  `Bugsink e2e alerts` and delete them.
 * `Bugsink e2e: refused query` (uid `bugsink-e2e-refused`): a panel for a project that does not exist, used by the
   end-to-end tests to check that a refused query shows Bugsink's message.
 

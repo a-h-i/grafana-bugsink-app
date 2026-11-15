@@ -1,0 +1,151 @@
+{
+  "uid": "bugsink-alerting",
+  "title": "Bugsink current values",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "time": {
+    "from": "now-7d",
+    "to": "now"
+  },
+  "timepicker": {},
+  "templating": {
+    "list": []
+  },
+  "annotations": {
+    "list": []
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Open issues in sample-python",
+      "gridPos": {
+        "h": 6,
+        "w": 8,
+        "x": 0,
+        "y": 0
+      },
+      "datasource": {
+        "type": "ahmedismail-bugsink-datasource",
+        "uid": "bugsink"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "ahmedismail-bugsink-datasource",
+            "uid": "bugsink"
+          },
+          "queryType": "issueCount",
+          "project": 1,
+          "state": "open"
+        }
+      ],
+      "options": {},
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Events in sample-python this hour",
+      "gridPos": {
+        "h": 6,
+        "w": 8,
+        "x": 8,
+        "y": 0
+      },
+      "datasource": {
+        "type": "ahmedismail-bugsink-datasource",
+        "uid": "bugsink"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "ahmedismail-bugsink-datasource",
+            "uid": "bugsink"
+          },
+          "queryType": "eventCount",
+          "project": 1
+        }
+      ],
+      "options": {},
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Issues seen in the last hour",
+      "gridPos": {
+        "h": 6,
+        "w": 8,
+        "x": 16,
+        "y": 0
+      },
+      "datasource": {
+        "type": "ahmedismail-bugsink-datasource",
+        "uid": "bugsink"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "ahmedismail-bugsink-datasource",
+            "uid": "bugsink"
+          },
+          "queryType": "issueCount",
+          "state": "all",
+          "minutes": 60
+        }
+      ],
+      "options": {},
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      }
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "New issues per day in sample-python",
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 6
+      },
+      "datasource": {
+        "type": "ahmedismail-bugsink-datasource",
+        "uid": "bugsink"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "ahmedismail-bugsink-datasource",
+            "uid": "bugsink"
+          },
+          "queryType": "newIssues",
+          "project": 1
+        }
+      ],
+      "options": {},
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "bars"
+          }
+        },
+        "overrides": []
+      },
+      "interval": "1d"
+    }
+  ]
+}

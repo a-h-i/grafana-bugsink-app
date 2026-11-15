@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import React from 'react';
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import { VolumeSeries } from '../../datasource/types';
 import { IssueTableContext, VolumeSource } from './IssueTableContext';
 import { SparklineCell } from './SparklineCell';
@@ -81,11 +81,21 @@ describe('SparklineCell', () => {
       </IssueTableContext.Provider>
     );
     const view = render(ui(false));
-    const chart = await screen.findByTestId('uplot-main-div');
+    const chart = (await screen.findByTestId('uplot-main-div')).firstElementChild;
+    expect(chart).not.toBeNull();
 
     view.rerender(ui(true));
 
-    expect(screen.getByTestId('uplot-main-div')).toBe(chart);
+    expect(screen.getByTestId('uplot-main-div').firstElementChild).toBe(chart);
+  });
+
+  it('keeps the chart out of the tab order and gives it the total as a title', async () => {
+    renderCell({ issueVolume: jest.fn().mockResolvedValue({ times, counts: [0, 3, 4], total: 7 }) });
+
+    const chart = await screen.findByRole('img', { name: '7 events in the last 24 hours' });
+
+    expect(chart).not.toHaveAttribute('tabindex');
+    expect(chart).toHaveAttribute('title', '7 events in the last 24 hours');
   });
 
   it('shows a loading state while the request is pending', () => {
@@ -101,14 +111,6 @@ describe('SparklineCell', () => {
 
     expect(await screen.findByLabelText('7 events in the last 24 hours')).toBeInTheDocument();
     expect(screen.getByTestId('uplot-main-div')).toBeInTheDocument();
-  });
-
-  it('shows the total as a tooltip on the line', async () => {
-    renderCell({ issueVolume: jest.fn().mockResolvedValue({ times, counts: [0, 3, 4], total: 7 }) });
-
-    fireEvent.mouseEnter(await screen.findByRole('img', { name: '7 events in the last 24 hours' }));
-
-    expect(await screen.findByRole('tooltip')).toHaveTextContent('7 events in the last 24 hours');
   });
 
   it('says No events when every hour is zero', async () => {

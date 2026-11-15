@@ -77,10 +77,8 @@ export function SparklineCell({ id }: { id: string }): React.JSX.Element {
   }
   const label = `${current.series.total} events in the last 24 hours`;
   return (
-    <Tooltip content={label}>
-      <span role="img" aria-label={label} style={BOX}>
-        {sparkline && <Sparkline width={WIDTH} height={HEIGHT} theme={theme} sparkline={sparkline} />}
-      </span>
-    </Tooltip>
+    <span role="img" aria-label={label} title={label} style={BOX}>
+      {sparkline && <Sparkline width={WIDTH} height={HEIGHT} theme={theme} sparkline={sparkline} />}
+    </span>
   );
 }

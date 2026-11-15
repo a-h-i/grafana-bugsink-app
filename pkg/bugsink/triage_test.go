@@ -34,7 +34,7 @@ func TestTriageSendsBodilessPost(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if method != http.MethodPost || path != "/api/canonical/0/issues/"+triageUUID+"/"+string(action)+"/" || query != "" || len(body) != 0 || auth != "Bearer tok" {
+			if method != http.MethodPost || path != "/api/canonical/0/issues/"+triageUUID+"/"+string(action)+"/" || query != "" || len(body) != 0 || auth != "Bearer "+testToken {
 				t.Fatalf("%s %s ?%s body %q auth %q", method, path, query, body, auth)
 			}
 			if !issue.IsResolved || issue.FriendlyID != "SAMPLE-1" || issue.ID != triageUUID {
