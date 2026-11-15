@@ -6,7 +6,13 @@ export type IssueState = 'all' | 'open' | 'unresolved' | 'resolved' | 'muted';
 export type IssueSort = 'last_seen' | 'digested_event_count' | 'digest_order';
 export type SortOrder = 'asc' | 'desc';
 
-export type QueryType = 'issues' | 'events';
+export type QueryType = 'issues' | 'events' | 'volume';
+
+export interface VolumeSeries {
+  times: number[];
+  counts: number[];
+  total: number;
+}
 
 export interface BugsinkQuery extends DataQuery {
   project?: number;

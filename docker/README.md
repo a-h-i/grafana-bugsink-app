@@ -110,6 +110,9 @@ values; the login form is disabled, so use them with basic authentication (`curl
   Bugsink. The table needs a recent event; create one with `curl http://localhost:8810/handled`.
 * `Bugsink trace` (uid `bugsink-trace`, last 24 hours): the issues and the events of one trace. Paste a trace id from
   `curl http://localhost:8810/handled` into `Trace ID`.
+* `Bugsink event volume` (uid `bugsink-volume`, last 7 days): a time-series panel `Events per hour in sample-python`, drawn as
+  bars, from the `Event volume` query of project 1 with a minimum interval of `1h`, so it opens without notices. The last bar
+  is the hour in progress.
 * `Bugsink e2e: refused query` (uid `bugsink-e2e-refused`): a panel for a project that does not exist, used by the
   end-to-end tests to check that a refused query shows Bugsink's message.
 

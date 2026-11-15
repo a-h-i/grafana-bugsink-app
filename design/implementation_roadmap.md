@@ -186,15 +186,19 @@ plugin on Grafana OSS cannot check an action for the caller without extra featur
   History details from Bugsink's `metadata`; on the issue list, actions disabled while the list reloads and one
   message per list load, dropped when the page leaves it; the role and the comment status in the triage log line.
 * **Demo:** as an Editor on the provisioned `Bugsink triage` data source (attribution on by default), mute an
-  issue for two days and resolve another in the next release from the issue page, and see in Bugsink and in
-  the History section a comment `... from Grafana by "m7-editor".` for each; also mute until a threshold and
-  resolve in the latest release; a mute body with a string number is refused. Runs as an e2e test.
+  issue for two days and resolve another in the next release from the issue page; also mute until a threshold
+  and resolve in the latest release. After each action Bugsink's newest comment is
+  `... from Grafana by "m7-editor".`, and after the mute for two days, the threshold mute and the resolve in
+  the latest release the History section's two newest entries are the comment, then the action. A mute body
+  with a string number is refused. Runs as an e2e test.
 
 ### M9: Event volume series
 
-* **Scope:** time-series query types for event volume per project and per issue from `event-counts`;
-  hour-boundary handling, the 90-day limit and re-bucketing to coarser intervals; the sparkline column in
-  the issue list, one call per visible row, cached.
+Built; see [`plans/m9-event-volume.md`](plans/m9-event-volume.md).
+
+* **Scope:** the `Event volume` query type for event volume per project and per issue from `event-counts`;
+  hour-boundary handling, the 90-day limit and re-bucketing to coarser intervals; the `Last 24 hours`
+  sparkline column in the issue list, one call per visible row, cached.
 * **Demo:** a time-series panel of a project's event volume over seven days; the issue list shows a
   sparkline per row and stays responsive with a full page of issues.
 

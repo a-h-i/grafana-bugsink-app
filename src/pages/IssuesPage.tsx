@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { TimeRange, toURLRange } from '@grafana/data';
 import { config, PluginPage } from '@grafana/runtime';
 import { Alert, Combobox, Field, LoadingBar, LoadingPlaceholder, RefreshPicker, TimeRangePicker } from '@grafana/ui';
@@ -60,11 +60,12 @@ export function IssuesPage(): React.JSX.Element {
       return;
     }
     const scope: Scope = { active: true };
+    const controller = new AbortController();
     scopeRef.current = scope;
     const { query, from, to } = readListState(new URLSearchParams(canonical));
     const requestKey = keyOf(canonical, refresh);
     source
-      .listIssues(query, toTimeRange(from, to))
+      .listIssues(query, toTimeRange(from, to), controller.signal)
       .then((list): Outcome => ({ source, key: requestKey, list }))
       .catch((error): Outcome => ({
         source,
@@ -74,9 +75,25 @@ export function IssuesPage(): React.JSX.Element {
       .then((result) => scope.active && setOutcome(result));
     return () => {
       scope.active = false;
+      controller.abort();
       setTriageMessage((m) => (m?.key === requestKey ? undefined : m));
     };
   }, [source, canonical, refresh]);
+
+  const current = outcome?.source === source ? outcome : undefined;
+  const byId = useMemo(
+    () => (statuses && statuses.outcome === current ? statuses.byId : undefined),
+    [statuses, current]
+  );
+  const rows = useMemo(
+    () =>
+      current && 'list' in current
+        ? current.list.rows.map((row) => (byId?.[row.id] ? { ...row, status: byId[row.id] } : row))
+        : [],
+    [current, byId]
+  );
+  const search = location.search;
+  const issueHref = useCallback((row: IssueRow) => issuePath(row.id, search), [search]);
 
   if (instances.length === 0) {
     return (
@@ -97,8 +114,6 @@ export function IssuesPage(): React.JSX.Element {
     const sort = rest.sort === 'digest_order' ? 'last_seen' : rest.sort;
     write({ ...state, ds: next, query: { ...rest, sort } });
   };
-
-  const current = outcome?.source === source ? outcome : undefined;
 
   const onAction = (row: IssueRow, action: TriageAction) => {
     if (!source || !current) {
@@ -145,12 +160,6 @@ export function IssuesPage(): React.JSX.Element {
         })
       );
   };
-  const byId = statuses && statuses.outcome === current ? statuses.byId : {};
-  const rows =
-    current && 'list' in current
-      ? current.list.rows.map((row) => (byId[row.id] ? { ...row, status: byId[row.id] } : row))
-      : [];
-
   const actions = [
     <TimeRangePicker
       key="range"
@@ -190,11 +199,12 @@ export function IssuesPage(): React.JSX.Element {
       {triageMessage?.key === key && <Alert severity={triageMessage.severity} title={triageMessage.message} />}
       {current && 'error' in current && <Alert severity="error" title={current.error} />}
       {current && 'list' in current && current.list.notice && <Alert severity="warning" title={current.list.notice} />}
-      {current && 'list' in current && (
+      {source && current && 'list' in current && (
         <IssueTable
           rows={rows}
           timeZone={timeZone}
-          issueHref={(row) => issuePath(row.id, location.search)}
+          source={source}
+          issueHref={issueHref}
           triage={source?.canTriage() ? { busyIds, disabled: current.key !== key, onAction } : undefined}
         />
       )}

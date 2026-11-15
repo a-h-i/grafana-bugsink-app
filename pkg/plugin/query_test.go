@@ -673,23 +673,43 @@ func (rs *recordingServer) requests() []seenRequest {
 func TestQueryNeverWrites(t *testing.T) {
 	f := newFakeBugsink(t)
 	f.pages = []string{inRange("X-1")}
-	rs := newRecordingServer(t, f.serve)
+	rs := newRecordingServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/event-counts/") {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = fmt.Fprint(w, countsAnswer(r.URL.Query()))
+			return
+		}
+		f.serve(w, r)
+	})
 	ds := newInstance(t, rs.srv.URL, secretToken, `{"browserUrl":"http://b","triageEnabled":true}`)
+	ds.now = func() time.Time { return rangeTo.Add(24 * time.Hour) }
+	countReads := func() (n int) {
+		for _, s := range rs.requests() {
+			if strings.HasSuffix(s.path, "/event-counts/") {
+				n++
+			}
+		}
+		return n
+	}
 	for _, q := range []struct {
 		name, queryType, model, message string
+		readsCounts                     bool
 	}{
-		{"resolve in the model", "", `{"queryType":"resolve","issue":"X-1"}`, `Unknown queryType "resolve".`},
-		{"triage in the model", "", `{"queryType":"triage","issue":"X-1"}`, `Unknown queryType "triage".`},
-		{"resolve as the query type", "resolve", `{"issue":"X-1"}`, `Unknown queryType "resolve".`},
-		{"triage as the query type", "triage", `{"issue":"X-1"}`, `Unknown queryType "triage".`},
-		{"issues", "", `{"queryType":"issues"}`, ""},
-		{"events", "", `{"queryType":"events","issue":"X-1"}`, ""},
+		{"resolve in the model", "", `{"queryType":"resolve","issue":"X-1"}`, `Unknown queryType "resolve".`, false},
+		{"triage in the model", "", `{"queryType":"triage","issue":"X-1"}`, `Unknown queryType "triage".`, false},
+		{"resolve as the query type", "resolve", `{"issue":"X-1"}`, `Unknown queryType "resolve".`, false},
+		{"triage as the query type", "triage", `{"issue":"X-1"}`, `Unknown queryType "triage".`, false},
+		{"issues", "", `{"queryType":"issues"}`, "", false},
+		{"events", "", `{"queryType":"events","issue":"X-1"}`, "", false},
+		{"volume of an issue", "", `{"queryType":"volume","issue":"X-1"}`, "", true},
+		{"volume of a project", "volume", `{"project":1}`, "", true},
 	} {
 		t.Run(q.name, func(t *testing.T) {
 			req := &backend.QueryDataRequest{Queries: []backend.DataQuery{{
 				RefID: "A", QueryType: q.queryType, JSON: json.RawMessage(q.model),
 				TimeRange: backend.TimeRange{From: rangeFrom, To: rangeTo},
 			}}}
+			before := countReads()
 			resp, err := ds.QueryData(context.Background(), req)
 			if err != nil {
 				t.Fatal(err)
@@ -698,6 +718,9 @@ func TestQueryNeverWrites(t *testing.T) {
 			if q.message == "" {
 				if r.Error != nil {
 					t.Fatalf("error %v", r.Error)
+				}
+				if q.readsCounts && countReads() == before {
+					t.Fatal("the volume query read no event counts")
 				}
 				return
 			}

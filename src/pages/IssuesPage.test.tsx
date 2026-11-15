@@ -10,7 +10,7 @@ const mockGetList = jest.fn();
 const mockGet = jest.fn();
 const mockSources: Record<
   string,
-  { getProjects: jest.Mock; listIssues: jest.Mock; canTriage: jest.Mock; triage: jest.Mock }
+  { getProjects: jest.Mock; listIssues: jest.Mock; canTriage: jest.Mock; triage: jest.Mock; issueVolume: jest.Mock }
 > = {};
 
 jest.mock('@grafana/runtime', () => ({
@@ -98,6 +98,7 @@ describe('IssuesPage', () => {
         listIssues: jest.fn().mockResolvedValue({ rows: [row(`${uid}-1`, `${uid.toUpperCase()}-1`)] }),
         canTriage: jest.fn().mockReturnValue(false),
         triage: jest.fn(),
+        issueVolume: jest.fn().mockResolvedValue({ times: [1, 2], counts: [0, 2], total: 2 }),
       };
     }
   });
@@ -320,6 +321,57 @@ describe('IssuesPage', () => {
     expect(screen.queryByRole('status', { name: 'Loading bar' })).not.toBeInTheDocument();
   });
 
+  it('aborts the previous list request on a new search and the current one on unmount', async () => {
+    mockSources.bugsink.listIssues.mockReturnValue(new Promise(() => {}));
+    const { unmount } = renderPage('?ds=bugsink');
+    await waitFor(() => expect(mockSources.bugsink.listIssues).toHaveBeenCalledTimes(1));
+    const first: AbortSignal = mockSources.bugsink.listIssues.mock.calls[0][2];
+    expect(first.aborted).toBe(false);
+    await screen.findByRole('combobox', { name: 'State' });
+
+    await pick('State', 'Muted');
+
+    await waitFor(() => expect(mockSources.bugsink.listIssues).toHaveBeenCalledTimes(2));
+    expect(first.aborted).toBe(true);
+    const second: AbortSignal = mockSources.bugsink.listIssues.mock.calls[1][2];
+    expect(second.aborted).toBe(false);
+
+    unmount();
+
+    expect(second.aborted).toBe(true);
+  });
+
+  it('shows no message when the list read it cancelled rejects', async () => {
+    mockSources.bugsink.listIssues.mockImplementation(
+      (_query: unknown, _range: unknown, signal: AbortSignal) =>
+        new Promise((resolve, reject) => {
+          if (mockSources.bugsink.listIssues.mock.calls.length === 1) {
+            signal.addEventListener('abort', () => reject(Object.assign(new Error('aborted'), { name: 'AbortError' })));
+          } else {
+            resolve({ rows: [row('u2', 'MUTED-1')] });
+          }
+        })
+    );
+    renderPage('?ds=bugsink');
+    await waitFor(() => expect(mockSources.bugsink.listIssues).toHaveBeenCalledTimes(1));
+    await screen.findByRole('combobox', { name: 'State' });
+
+    await pick('State', 'Muted');
+
+    expect(await screen.findByText('MUTED-1')).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('shows no alert above the table when a sparkline request fails', async () => {
+    mockSources.bugsink.issueVolume.mockRejectedValue(new Error('volume down'));
+
+    renderPage('?ds=bugsink');
+
+    expect(await screen.findByLabelText('Events per hour unavailable: volume down')).toBeInTheDocument();
+    expect(screen.getByText('BUGSINK-1')).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
   it('shows the backend message and neither table nor empty state when the query fails', async () => {
     mockSources.bugsink.listIssues.mockRejectedValue(
       new Error('Bugsink refused the request: No Project matches the given query.')
@@ -395,6 +447,36 @@ describe('IssuesPage', () => {
       await waitFor(() => expect(statusOf('SAMPLE-PYTHON-2')).toBe('Resolved'));
       expect(screen.queryByRole('button', { name: /^Resolve SAMPLE-PYTHON-2/ })).not.toBeInTheDocument();
       expect(mockSources.bugsink.listIssues).toHaveBeenCalledTimes(loads);
+    });
+
+    it('a succeeded action does not restart any sparkline', async () => {
+      mockSources.bugsink.triage.mockResolvedValue({ id: 'u1', status: 'resolved' });
+      renderPage('?ds=bugsink');
+      await screen.findByText('SAMPLE-PYTHON-2');
+      const volumeCalls = mockSources.bugsink.issueVolume.mock.calls.length;
+      const signals: AbortSignal[] = mockSources.bugsink.issueVolume.mock.calls.map((call) => call[1]);
+
+      await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Resolve SAMPLE-PYTHON-2' })));
+
+      await waitFor(() => expect(statusOf('SAMPLE-PYTHON-2')).toBe('Resolved'));
+      expect(mockSources.bugsink.issueVolume).toHaveBeenCalledTimes(volumeCalls);
+      expect(signals.some((signal) => signal.aborted)).toBe(false);
+    });
+
+    it('a failed action does not restart any sparkline', async () => {
+      mockSources.bugsink.triage.mockRejectedValue(new Error('Bugsink refused the request: nope.'));
+      renderPage('?ds=bugsink');
+      await screen.findByText('SAMPLE-PYTHON-2');
+      const volumeCalls = mockSources.bugsink.issueVolume.mock.calls.length;
+      const loads = mockSources.bugsink.listIssues.mock.calls.length;
+      const signals: AbortSignal[] = mockSources.bugsink.issueVolume.mock.calls.map((call) => call[1]);
+
+      await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Resolve SAMPLE-PYTHON-2' })));
+
+      await waitFor(() => expect(mockSources.bugsink.listIssues).toHaveBeenCalledTimes(loads + 1));
+      expect(await screen.findByText('SAMPLE-PYTHON-2: Bugsink refused the request: nope.')).toBeInTheDocument();
+      expect(mockSources.bugsink.issueVolume).toHaveBeenCalledTimes(volumeCalls);
+      expect(signals.some((signal) => signal.aborted)).toBe(false);
     });
 
     it('shows the failure inline and loads the list again', async () => {

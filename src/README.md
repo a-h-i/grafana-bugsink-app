@@ -41,8 +41,10 @@ The Bugsink app opens on a page that lists issues. You need at least one Bugsink
 - **Data source**: the picker at the top lists your Bugsink data sources. The default data source is selected first; without a default, the first one by name. Changing the data source clears the Project filter and, if Sort by is `Arrival order`, resets it to `Last seen`.
 - **Filters**: Project, State, Sort by, Order and Search are the controls of the query editor, described under [Query controls](#query-controls). They apply when you change them; Search applies when you leave the field or press Enter.
 - **Time range**: the picker at the top right. The default is the last 7 days. The page shows issues last seen within the range. The refresh button runs the query again; within 15 seconds of the same query it shows the same answer (see [Limits](#limits)).
-- **Table**: 25 issues per page, with the columns Issue, Type, Message, Transaction, Project, Events, First seen, Last seen and Status, and Actions when triage is on for the data source and you may triage. In the Issue column, the short id opens the issue page in the app, and the icon beside it opens the issue in Bugsink in a new tab (see [Issue detail page](#issue-detail-page) and [Link to Bugsink](#link-to-bugsink)).
+- **Table**: 25 issues per page, with the columns Issue, Type, Message, Transaction, Project, Events, Last 24 hours, First seen, Last seen and Status, and Actions when triage is on for the data source and you may triage. In the Issue column, the short id opens the issue page in the app, and the icon beside it opens the issue in Bugsink in a new tab (see [Issue detail page](#issue-detail-page) and [Link to Bugsink](#link-to-bugsink)).
 - **States**: on the first load and after you change the data source, the page shows `Loading issues...`. A later load keeps the table on screen and shows a loading bar above it. When nothing matches, it shows `No issues match these filters in this time range.` A failed read shows the error message.
+
+- **Last 24 hours**: one small chart of the issue's events per hour, for each visible row. The page asks for the charts of the visible rows only, at most four at a time. A cell shows one of four states: a spinner while it loads, the chart, `No events` when the issue has no events in the last 24 hours, or a warning icon when its chart could not be loaded. A failed chart does not affect the list or the triage actions. A chart loads when its row appears and is not loaded again while the row stays on screen, the refresh button included. The backend answers from a one-minute cache, which can delay a new event by up to a minute more.
 
 The address bar holds the whole state: data source, filters, time range, sort and order. Copy the address to reopen the same list. The page keeps the address parameters it does not use, such as `orgId` and `kiosk`, as they are.
 
@@ -119,7 +121,7 @@ The test with Triage on asks Bugsink whether the token may triage. It calls reso
 
 ### Who may triage
 
-Users whose Grafana org role is Editor or Admin. A Viewer sees no controls, and a direct call is refused with `Only editors and admins can triage issues.` Grafana RBAC roles and plugin actions do not apply: a backend plugin on Grafana OSS cannot check them for the caller without the `externalServiceAccounts` and `idForwarded` feature toggles, which are off by default and support one organization only.
+Users whose Grafana org role is Editor or Admin. A Viewer sees no controls, and a direct call is refused with `Only editors and admins can triage issues.` Grafana RBAC roles and plugin actions do not apply: the plugin's backend could check one only the way Grafana's guide to RBAC in app plugins does, with the `externalServiceAccounts` feature, which "only supports single organization setups", a service account from the plugin's `iam` section and the user's ID token forwarded in the `X-Grafana-Id` header.
 
 An anonymous session and a service account count by their org role.
 
@@ -242,6 +244,31 @@ The dashboard time range does not apply to events: an issue, an event ID or a tr
 ### Example
 
 The development stack has the dashboard `Bugsink trace`. Type a trace id in `Trace ID`, and it shows two tables: the issues of the trace and its events.
+
+## Querying event volume
+
+In the query editor of a panel or Explore, choose the `Query type` `Event volume`. The result is a time series of the events of a project or of an issue. It suits a dashboard that shows how often errors arrive.
+
+- **Project**: counts the events of the project.
+- **Issue**: counts the events of one issue. Issue is a short id such as `SAMPLE-PYTHON-2`, or Bugsink's issue id. It accepts dashboard variables.
+- When both are set, Issue wins. With neither, the panel shows the notice `An event volume query needs a project or an issue.` and no data.
+
+The frame has a `time` field and a `count` field. The counts match Bugsink's own hourly counts.
+
+### Steps
+
+Bugsink counts events per hour, so the smallest step is one hour. A finer dashboard interval shows the notice `Each point counts one hour of events: Bugsink counts events per hour.` and one-hour points. A coarser interval is rounded up to whole hours, and the notice then names the span.
+
+Steps are aligned to UTC, counted from 1970-01-01. A one-day step runs from midnight to midnight UTC whatever the dashboard's time zone. A seven-day step starts on a Thursday. Set the panel's minimum interval to `1h`, and prefer `1d` over `7d` steps.
+
+The current step is partial until it ends. Seven days at a one-hour step is 169 points.
+
+### Limits
+
+- Bugsink keeps 90 days of hourly counts. A time range of 90 days or more (the `Last 90 days` preset included) is cut, and the panel shows the warning `Bugsink keeps hourly event counts for 90 days, so the series starts later than the time range.`
+- A time range entirely older than 90 days shows an empty chart with the same warning, and one in the future shows an empty chart.
+- Results can be up to 60 seconds old.
+- Each query makes at most one `event-counts` request (none for an empty time range or within a minute of the same query); a project's series also reads the project list for its name. A project needs a token that can read that project (`projects:read`). An issue needs `issues:read`. A token bound to one project that asks for another project is refused with Bugsink's own message.
 
 ## Trace and log links
 

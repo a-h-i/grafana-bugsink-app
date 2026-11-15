@@ -32,6 +32,8 @@ type Datasource struct {
 	issueCache         *cache[bugsink.IssueList]
 	projectCache       *cache[projectsResult]
 	eventCache         *cache[eventsResult]
+	countCache         *cache[[]bugsink.EventCount]
+	now                func() time.Time
 	resources          backend.CallResourceHandler
 }
 
@@ -58,6 +60,8 @@ func NewDatasource(ctx context.Context, s backend.DataSourceInstanceSettings) (i
 		issueCache:    newCache[bugsink.IssueList](cacheTTL, cacheMaxEntries),
 		projectCache:  newCache[projectsResult](cacheTTL, cacheMaxEntries),
 		eventCache:    newCache[eventsResult](cacheTTL, cacheMaxEntries),
+		countCache:    newCache[[]bugsink.EventCount](countCacheTTL, countCacheMaxEntries),
+		now:           time.Now,
 	}
 	d.settingsErr = d.configure(ctx, s)
 	d.resources = httpadapter.New(canonical(d.routes()))

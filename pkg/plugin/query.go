@@ -47,9 +47,12 @@ func (d *Datasource) query(ctx context.Context, q backend.DataQuery) backend.Dat
 		return failure(backend.StatusBadRequest, invalid)
 	}
 	var resp backend.DataResponse
-	if m.QueryType == queryTypeEvents {
+	switch m.QueryType {
+	case queryTypeEvents:
 		resp = d.queryEvents(ctx, m, project)
-	} else {
+	case queryTypeVolume:
+		resp = d.queryVolume(ctx, q, m, project)
+	default:
 		resp = d.queryIssues(ctx, q, m, project)
 	}
 	for _, frame := range resp.Frames {
@@ -114,7 +117,7 @@ func parseModel(q backend.DataQuery) (m queryModel, project int, invalid string)
 	if m.QueryType == "" {
 		m.QueryType = q.QueryType
 	}
-	if m.QueryType != "" && !slices.Contains([]string{queryTypeIssues, queryTypeEvents}, m.QueryType) {
+	if m.QueryType != "" && !slices.Contains([]string{queryTypeIssues, queryTypeEvents, queryTypeVolume}, m.QueryType) {
 		return m, 0, fmt.Sprintf("Unknown queryType %q.", m.QueryType)
 	}
 	return m, project, ""

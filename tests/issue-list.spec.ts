@@ -5,7 +5,7 @@ import { expect, test } from './fixtures';
 import { BUGSINK_BROWSER_URL, EVENT_MARKER } from './seeded';
 
 const LINK_PATTERN = new RegExp(`^${BUGSINK_BROWSER_URL}/issues/issue/[0-9a-f-]{36}/event/last/$`);
-const COLUMN = { message: 3, project: 5, events: 6, status: 9 };
+const COLUMN = { message: 3, project: 5, events: 6, status: 10 };
 
 async function choose(page: Page, label: string, option: string) {
   await page.getByRole('combobox', { name: label }).click();
@@ -38,6 +38,7 @@ test.describe('issue list page', () => {
     await expect(page).toHaveURL(/[?&]project=1(&|$)/);
     await expect(page).toHaveURL(/state=open/);
     await expect(page).toHaveURL(/sort=digested_event_count/);
+    await expect(page.getByRole('columnheader', { name: 'Last 24 hours' })).toBeVisible();
 
     await expect(async () => {
       const projects = await cells(page, COLUMN.project).allTextContents();

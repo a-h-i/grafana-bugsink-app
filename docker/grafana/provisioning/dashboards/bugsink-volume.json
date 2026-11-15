@@ -1,0 +1,56 @@
+{
+  "uid": "bugsink-volume",
+  "title": "Bugsink event volume",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "time": {
+    "from": "now-7d",
+    "to": "now"
+  },
+  "timepicker": {},
+  "templating": {
+    "list": []
+  },
+  "annotations": {
+    "list": []
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "Events per hour in sample-python",
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "datasource": {
+        "type": "ahmedismail-bugsink-datasource",
+        "uid": "bugsink"
+      },
+      "interval": "1h",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "ahmedismail-bugsink-datasource",
+            "uid": "bugsink"
+          },
+          "queryType": "volume",
+          "project": 1
+        }
+      ],
+      "options": {},
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "bars"
+          }
+        },
+        "overrides": []
+      }
+    }
+  ]
+}

@@ -10,8 +10,8 @@ import {
   dateTime,
 } from '@grafana/data';
 import { config, DataSourceWithBackend, setTemplateSrv } from '@grafana/runtime';
-import { lastValueFrom, of } from 'rxjs';
-import { BugsinkDataSource } from './datasource';
+import { lastValueFrom, Observable, of } from 'rxjs';
+import { BugsinkDataSource, SPARKLINE_CONCURRENCY } from './datasource';
 import { BugsinkOptions, DEFAULT_QUERY, MuteTerms } from './types';
 
 const settings = { uid: 'bugsink', name: 'Bugsink', jsonData: {} } as DataSourceInstanceSettings<BugsinkOptions>;
@@ -389,6 +389,135 @@ describe('BugsinkDataSource', () => {
       jest.spyOn(ds, 'query').mockReturnValue(of({ data: [], error: { status: 502 } }));
 
       await expect(ds.listIssues({ refId: 'x' }, range)).rejects.toThrow('The issues could not be loaded.');
+    });
+  });
+
+  describe('issueVolume', () => {
+    const volumeFrame = createDataFrame({
+      fields: [
+        { name: 'time', type: FieldType.time, values: [1000, 2000] },
+        { name: 'count', type: FieldType.number, values: [2, 5] },
+      ],
+    });
+
+    afterEach(() => jest.useRealTimers());
+
+    function hanging() {
+      const teardown = jest.fn();
+      const subscribed = jest.fn();
+      const observable = new Observable<never>(() => {
+        subscribed();
+        return teardown;
+      });
+      return { observable, teardown, subscribed };
+    }
+
+    it('queries the volume of the issue over the last 24 hours', async () => {
+      jest.useFakeTimers().setSystemTime(new Date('2026-11-15T12:34:56Z'));
+      const ds = createDataSource();
+      const query = jest.spyOn(ds, 'query').mockReturnValue(of({ data: [volumeFrame] }));
+
+      const series = await ds.issueVolume('a1', new AbortController().signal);
+
+      expect(series).toEqual({ times: [1000, 2000], counts: [2, 5], total: 7 });
+      expect(query).toHaveBeenCalledTimes(1);
+      const request = query.mock.calls[0][0];
+      expect(request.targets).toEqual([{ queryType: 'volume', issue: 'a1', refId: 'volume', datasource: ds.getRef() }]);
+      expect(request.intervalMs).toBe(3600000);
+      expect(request.maxDataPoints).toBe(24);
+      expect(request.range.from.toISOString()).toBe('2026-11-14T13:00:00.000Z');
+      expect(request.range.to.toISOString()).toBe('2026-11-15T12:34:56.000Z');
+    });
+
+    it('rejects with the message of a failed query', async () => {
+      const ds = createDataSource();
+      const message = 'Bugsink refused the request: No Issue matches the given query.';
+      jest.spyOn(ds, 'query').mockReturnValue(of({ data: [], error: { message } }));
+
+      await expect(ds.issueVolume('a1', new AbortController().signal)).rejects.toThrow(message);
+    });
+
+    it('refuses an id that is not an issue id without a query', async () => {
+      const ds = createDataSource();
+      const query = jest.spyOn(ds, 'query');
+
+      await expect(ds.issueVolume('a/b', new AbortController().signal)).rejects.toThrow('"a/b" is not an issue id.');
+      expect(query).not.toHaveBeenCalled();
+    });
+
+    it('starts at most 4 subscriptions for 6 calls', () => {
+      const ds = createDataSource();
+      const { observable, subscribed } = hanging();
+      jest.spyOn(ds, 'query').mockReturnValue(observable);
+
+      for (let i = 0; i < 6; i++) {
+        ds.issueVolume(`a${i}`, new AbortController().signal).catch(() => {});
+      }
+
+      expect(subscribed).toHaveBeenCalledTimes(SPARKLINE_CONCURRENCY);
+    });
+
+    it('unsubscribes a running call that is aborted and rejects with AbortError', async () => {
+      const ds = createDataSource();
+      const { observable, teardown } = hanging();
+      jest.spyOn(ds, 'query').mockReturnValue(observable);
+      const controller = new AbortController();
+
+      const result = ds.issueVolume('a1', controller.signal);
+      controller.abort();
+
+      await expect(result).rejects.toMatchObject({ name: 'AbortError' });
+      expect(teardown).toHaveBeenCalledTimes(1);
+    });
+
+    it('never starts a queued call that is aborted', async () => {
+      const ds = createDataSource();
+      const { observable, subscribed } = hanging();
+      jest.spyOn(ds, 'query').mockReturnValue(observable);
+      for (let i = 0; i < SPARKLINE_CONCURRENCY; i++) {
+        ds.issueVolume(`a${i}`, new AbortController().signal).catch(() => {});
+      }
+      const controller = new AbortController();
+
+      const queued = ds.issueVolume('late', controller.signal);
+      controller.abort();
+
+      await expect(queued).rejects.toMatchObject({ name: 'AbortError' });
+      expect(subscribed).toHaveBeenCalledTimes(SPARKLINE_CONCURRENCY);
+    });
+  });
+
+  describe('listIssues cancellation', () => {
+    const range: TimeRange = {
+      from: dateTime('2026-11-08T12:00:00Z'),
+      to: dateTime('2026-11-15T12:00:00Z'),
+      raw: { from: 'now-7d', to: 'now' },
+    };
+
+    it('unsubscribes and rejects with AbortError when the signal aborts', async () => {
+      const ds = createDataSource();
+      const teardown = jest.fn();
+      jest.spyOn(ds, 'query').mockReturnValue(new Observable<never>(() => teardown));
+      const controller = new AbortController();
+
+      const result = ds.listIssues({ refId: 'x' }, range, controller.signal);
+      controller.abort();
+
+      await expect(result).rejects.toMatchObject({ name: 'AbortError' });
+      expect(teardown).toHaveBeenCalledTimes(1);
+    });
+
+    it('unsubscribes at once for a signal already aborted', async () => {
+      const ds = createDataSource();
+      const teardown = jest.fn();
+      jest.spyOn(ds, 'query').mockReturnValue(new Observable<never>(() => teardown));
+      const controller = new AbortController();
+      controller.abort();
+
+      await expect(ds.listIssues({ refId: 'x' }, range, controller.signal)).rejects.toMatchObject({
+        name: 'AbortError',
+      });
+      expect(teardown).toHaveBeenCalledTimes(1);
     });
   });
 });

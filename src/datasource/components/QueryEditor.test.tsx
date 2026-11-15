@@ -66,4 +66,51 @@ describe('QueryEditor', () => {
     }
     expect(screen.queryByRole('combobox', { name: 'State' })).not.toBeInTheDocument();
   });
+
+  it('offers Issues, Events and Event volume', async () => {
+    await renderEditor();
+
+    const labels = screen
+      .getAllByRole('radio')
+      .map((radio) => radio.getAttribute('aria-label') ?? radio.nextSibling?.textContent);
+    expect(labels).toEqual(['Issues', 'Events', 'Event volume']);
+  });
+
+  it('choosing Event volume sets the type and runs', async () => {
+    const { onChange, onRunQuery } = await renderEditor({ project: 2 });
+
+    fireEvent.click(screen.getByRole('radio', { name: 'Event volume' }));
+
+    expect(onChange).toHaveBeenCalledWith({ refId: 'A', project: 2, queryType: 'volume' });
+    expect(onRunQuery).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders Project and Issue for a volume query and nothing else', async () => {
+    await renderEditor({ queryType: 'volume' });
+
+    expect(screen.getByRole('radio', { name: 'Event volume' })).toBeChecked();
+    expect(screen.getByRole('combobox', { name: 'Project' })).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Issue' })).toBeInTheDocument();
+    for (const name of ['Search', 'Event ID']) {
+      expect(screen.queryByRole('textbox', { name })).not.toBeInTheDocument();
+    }
+    expect(screen.queryByRole('combobox', { name: 'State' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('combobox', { name: 'Sort by' })).not.toBeInTheDocument();
+  });
+
+  it('applies a typed issue on blur and runs on Enter', async () => {
+    const { onChange, onRunQuery } = await renderEditor({ queryType: 'volume' });
+    const input = screen.getByRole('textbox', { name: 'Issue' });
+
+    fireEvent.change(input, { target: { value: 'SAMPLE-PYTHON-2' } });
+    expect(onChange).not.toHaveBeenCalled();
+    fireEvent.blur(input);
+    expect(onChange).toHaveBeenLastCalledWith({ refId: 'A', queryType: 'volume', issue: 'SAMPLE-PYTHON-2' });
+    expect(onRunQuery).not.toHaveBeenCalled();
+
+    fireEvent.change(input, { target: { value: 'SAMPLE-PYTHON-3' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    expect(onChange).toHaveBeenLastCalledWith({ refId: 'A', queryType: 'volume', issue: 'SAMPLE-PYTHON-3' });
+    expect(onRunQuery).toHaveBeenCalledTimes(1);
+  });
 });

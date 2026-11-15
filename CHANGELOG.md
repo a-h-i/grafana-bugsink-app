@@ -20,3 +20,6 @@
 - `Hide stack trace text` switch: removes Bugsink's own stack trace text in the backend.
 - The plugin no longer follows redirects from Bugsink. A Bugsink URL that redirects now fails the test with `did not answer like a Bugsink API (HTTP 30x)`; enter the address it redirects to.
 - The `logs_query` field of event tables is hidden; the Loki link still reads it.
+- Event volume query: a project's or an issue's events per hour or per whole-hour step as a time series, up to 90 days.
+- `Last 24 hours` column in the issue list: one small chart per visible row, loaded at most four at a time.
+- The issue list cancels a load that a newer one supersedes.

@@ -175,7 +175,8 @@ test.describe('triage', () => {
       await dialog.getByRole('button', { name: 'Mute', exact: true }).click();
       await expect(status(page)).toHaveText('Muted');
       await expect(historyEntry(page, 0)).toContainText('Muted until 10 or more events in 1 hour' + BY_EDITOR);
-      await expect(historyEntry(page, 1)).toContainText('Muted until 10 or more events in 1 hour');
+      await expect(historyEntry(page, 1).locator('strong')).toHaveText(/^Muted until 10 or more events in 1 hour/);
+      await expect(historyEntry(page, 1)).not.toContainText('from Grafana by');
       await expect(commentWarning(page)).toHaveCount(0);
       const muted = await bugsinkIssue(bugsink, issue.id);
       expect(muted.is_muted).toBe(true);
@@ -183,6 +184,7 @@ test.describe('triage', () => {
       await expectLatestComment(bugsink, issue.id, 'Muted until 10 or more events in 1 hour' + BY_EDITOR);
       await page.getByRole('button', { name: 'Unmute', exact: true }).click();
       await expect(status(page)).toHaveText('Open');
+      await expect(commentWarning(page)).toHaveCount(0);
       await expectOpenInBugsink(bugsink, issue.id);
     });
 
@@ -200,6 +202,7 @@ test.describe('triage', () => {
       await expectLatestComment(bugsink, chained.id, 'Resolved in the latest release' + BY_EDITOR);
       await page.getByRole('button', { name: 'Reopen', exact: true }).click();
       await expect(status(page)).toHaveText('Open');
+      await expect(commentWarning(page)).toHaveCount(0);
       await expectOpenInBugsink(bugsink, chained.id);
     });
 

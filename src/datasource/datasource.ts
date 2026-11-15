@@ -5,16 +5,19 @@ import {
   DataQueryRequest,
   DataQueryResponse,
   DataSourceInstanceSettings,
+  dateTime,
   getDefaultTimeRange,
   ScopedVars,
   TimeRange,
 } from '@grafana/data';
 import { config, DataSourceWithBackend, getTemplateSrv } from '@grafana/runtime';
-import { lastValueFrom, map, Observable } from 'rxjs';
+import { map, Observable } from 'rxjs';
 import { eventRows } from './eventRows';
 import { issueRows } from './issueRows';
+import { abortError, limiter } from './limiter';
 import { withLinkRanges } from './links';
 import { muteTermsError, SHAPE_MESSAGE } from './muteTerms';
+import { volumeSeries } from './volume';
 import {
   BugsinkOptions,
   BugsinkQuery,
@@ -30,22 +33,31 @@ import {
   Project,
   TriageAction,
   TriageResult,
+  VolumeSeries,
 } from './types';
 
 const APP_ID = 'ahmedismail-bugsink-app';
 const ISSUES_FAILED = 'The issues could not be loaded.';
 const EVENTS_FAILED = 'The events could not be loaded.';
 const QUIET = { showErrorAlert: false };
+const VOLUME_FAILED = 'The event volume could not be loaded.';
+const HOUR_MS = 3600000;
+const VOLUME_HOURS = 24;
+export const SPARKLINE_CONCURRENCY = 4;
 const ISSUE_ID = /^[A-Za-z0-9_-]{1,100}$/;
 
 export function isIssueId(id: string): boolean {
   return ISSUE_ID.test(id);
 }
 
-function issuePath(id: string): string {
+function assertIssueId(id: string): void {
   if (!isIssueId(id)) {
     throw new Error(`"${id}" is not an issue id.`);
   }
+}
+
+function issuePath(id: string): string {
+  assertIssueId(id);
   return `issues/${id}`;
 }
 
@@ -68,6 +80,7 @@ function failureMessage(error: { message?: string; data?: { message?: string } }
 
 export class BugsinkDataSource extends DataSourceWithBackend<BugsinkQuery, BugsinkOptions> {
   readonly triageEnabled: boolean;
+  private readonly limitVolume = limiter(SPARKLINE_CONCURRENCY);
 
   constructor(instanceSettings: DataSourceInstanceSettings<BugsinkOptions>) {
     super(instanceSettings);
@@ -126,8 +139,8 @@ export class BugsinkDataSource extends DataSourceWithBackend<BugsinkQuery, Bugsi
     });
   }
 
-  async listIssues(query: BugsinkQuery, range: TimeRange): Promise<IssueList> {
-    const frames = await this.runTarget({ ...DEFAULT_QUERY, ...query, refId: 'issues' }, range, ISSUES_FAILED);
+  async listIssues(query: BugsinkQuery, range: TimeRange, signal?: AbortSignal): Promise<IssueList> {
+    const frames = await this.runTarget({ ...DEFAULT_QUERY, ...query, refId: 'issues' }, range, ISSUES_FAILED, signal);
     const frame = frames[0];
     return { rows: frame ? issueRows(frame) : [], notice: frame?.meta?.notices?.[0]?.text };
   }
@@ -145,26 +158,69 @@ export class BugsinkDataSource extends DataSourceWithBackend<BugsinkQuery, Bugsi
     };
   }
 
-  private async runTarget(target: BugsinkQuery, range: TimeRange, failed: string): Promise<DataFrame[]> {
-    const response = await lastValueFrom(
-      this.query({
+  async issueVolume(id: string, signal: AbortSignal): Promise<VolumeSeries> {
+    assertIssueId(id);
+    return this.limitVolume(async (taskSignal) => {
+      const now = Date.now();
+      const from = Math.floor(now / HOUR_MS) * HOUR_MS - (VOLUME_HOURS - 1) * HOUR_MS;
+      const range: TimeRange = { from: dateTime(from), to: dateTime(now), raw: { from: 'now-24h', to: 'now' } };
+      const frames = await this.runTarget(
+        { queryType: 'volume', issue: id, refId: 'volume' },
+        range,
+        VOLUME_FAILED,
+        taskSignal,
+        { interval: '1h', intervalMs: HOUR_MS, maxDataPoints: VOLUME_HOURS }
+      );
+      return frames[0] ? volumeSeries(frames[0]) : { times: [], counts: [], total: 0 };
+    }, signal);
+  }
+
+  private runTarget(
+    target: BugsinkQuery,
+    range: TimeRange,
+    failed: string,
+    signal?: AbortSignal,
+    shape: { interval: string; intervalMs: number; maxDataPoints?: number } = { interval: '1m', intervalMs: 60000 }
+  ): Promise<DataFrame[]> {
+    return new Promise((resolve, reject) => {
+      let last: DataQueryResponse | undefined;
+      const subscription = this.query({
         targets: [{ ...target, datasource: this.getRef() }],
         range,
         rangeRaw: range.raw,
         app: APP_ID as CoreApp,
         requestId: `${target.refId}-${Math.random().toString(36).slice(2)}`,
-        interval: '1m',
-        intervalMs: 60000,
+        interval: shape.interval,
+        intervalMs: shape.intervalMs,
+        ...(shape.maxDataPoints !== undefined && { maxDataPoints: shape.maxDataPoints }),
         scopedVars: {},
         timezone: 'browser',
         startTime: Date.now(),
-      })
-    );
-    // eslint-disable-next-line @typescript-eslint/no-deprecated -- a failed fetch sets only error
-    const error = response.error;
-    if (error) {
-      throw new Error(failureMessage(error, failed));
-    }
-    return response.data;
+      }).subscribe({
+        next: (response) => {
+          last = response;
+        },
+        error: reject,
+        complete: () => {
+          // eslint-disable-next-line @typescript-eslint/no-deprecated -- a failed fetch sets only error
+          const error = last?.error;
+          if (error) {
+            reject(new Error(failureMessage(error, failed)));
+          } else {
+            resolve(last?.data ?? []);
+          }
+        },
+      });
+      const onAbort = () => {
+        subscription.unsubscribe();
+        reject(abortError());
+      };
+      if (signal?.aborted) {
+        onAbort();
+      } else {
+        signal?.addEventListener('abort', onAbort, { once: true });
+        subscription.add(() => signal?.removeEventListener('abort', onAbort));
+      }
+    });
   }
 }

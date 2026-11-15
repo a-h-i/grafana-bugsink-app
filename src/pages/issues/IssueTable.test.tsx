@@ -1,10 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import React from 'react';
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 
-import { IssueRow, TriageAction } from '../../datasource/types';
+import { IssueRow, TriageAction, VolumeSeries } from '../../datasource/types';
 import { MemoryRouter } from 'react-router-dom';
+import { limiter } from '../../datasource/limiter';
+import { SPARKLINE_CONCURRENCY } from '../../datasource/datasource';
 import { IssueTable, PAGE_SIZE } from './IssueTable';
+import { VolumeSource } from './IssueTableContext';
 
 function row(overrides: Partial<IssueRow> = {}): IssueRow {
   return {
@@ -32,13 +35,25 @@ type Triage = {
   onAction: (row: IssueRow, action: TriageAction) => void;
 };
 
-function renderTable(rows: IssueRow[], triage?: Triage) {
-  return render(
+const pendingSource = () => ({
+  issueVolume: jest.fn((_id: string, _signal: AbortSignal) => new Promise<VolumeSeries>(() => {})),
+});
+
+function tableUi(rows: IssueRow[], triage: Triage | undefined, source: VolumeSource) {
+  return (
     <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-      <IssueTable rows={rows} timeZone="utc" issueHref={issueHref} triage={triage} />
+      <IssueTable rows={rows} timeZone="utc" issueHref={issueHref} triage={triage} source={source} />
     </MemoryRouter>
   );
 }
+
+function renderTable(rows: IssueRow[], triage?: Triage, source: VolumeSource = pendingSource()) {
+  const view = render(tableUi(rows, triage, source));
+  return { ...view, again: (next: Triage | undefined) => view.rerender(tableUi(rows, next, source)) };
+}
+
+const manyRows = (count: number) =>
+  Array.from({ length: count }, (_, i) => row({ id: `id${i}`, friendlyId: `SAMPLE-PYTHON-${i + 1}` }));
 
 describe('IssueTable', () => {
   it('shows the columns in order without sort buttons', () => {
@@ -52,6 +67,7 @@ describe('IssueTable', () => {
       'Transaction',
       'Project',
       'Events',
+      'Last 24 hours',
       'First seen',
       'Last seen',
       'Status',
@@ -179,5 +195,119 @@ describe('IssueTable', () => {
     for (const button of screen.getAllByRole('button', { name: /^(Resolve|Mute) / })) {
       expect(button).toBeDisabled();
     }
+  });
+
+  describe('sparkline column', () => {
+    it('asks for the volume of each first-page row once', () => {
+      const source = pendingSource();
+      renderTable(manyRows(30), undefined, source);
+
+      expect(source.issueVolume).toHaveBeenCalledTimes(25);
+      const ids = source.issueVolume.mock.calls.map((call) => call[0]);
+      expect(ids).toEqual(Array.from({ length: 25 }, (_, i) => `id${i}`));
+    });
+
+    it('paging aborts the previous page', () => {
+      const source = pendingSource();
+      renderTable(manyRows(30), undefined, source);
+      const signals = source.issueVolume.mock.calls.map((call) => call[1]);
+
+      fireEvent.click(screen.getByRole('button', { name: '2' }));
+
+      expect(signals.every((signal) => signal.aborted)).toBe(true);
+      expect(source.issueVolume).toHaveBeenCalledTimes(30);
+      expect(source.issueVolume.mock.calls.slice(25).map((call) => call[0])).toEqual([
+        'id25',
+        'id26',
+        'id27',
+        'id28',
+        'id29',
+      ]);
+    });
+
+    it('one failing row stays in its cell', async () => {
+      const source = {
+        issueVolume: jest.fn(async (id: string) => {
+          if (id === 'id1') {
+            throw new Error('no such issue');
+          }
+          return { times: [1, 2], counts: [1, 2], total: 3 };
+        }),
+      };
+      const onAction = jest.fn();
+      renderTable(manyRows(3), { onAction }, source);
+
+      expect(await screen.findByLabelText('Events per hour unavailable: no such issue')).toBeInTheDocument();
+      expect(await screen.findAllByLabelText('3 events in the last 24 hours')).toHaveLength(2);
+      fireEvent.click(screen.getByRole('button', { name: 'Resolve SAMPLE-PYTHON-1' }));
+      expect(onAction).toHaveBeenCalledTimes(1);
+    });
+
+    it('triage does not restart sparklines', () => {
+      const source = pendingSource();
+      const rows = manyRows(3);
+      const { again } = renderTable(rows, { onAction: jest.fn() }, source);
+      const signals = source.issueVolume.mock.calls.map((call) => call[1]);
+
+      again({ busyIds: new Set(['id1']), disabled: false, onAction: jest.fn() });
+      again({ busyIds: new Set(), disabled: true, onAction: jest.fn() });
+
+      expect(source.issueVolume).toHaveBeenCalledTimes(3);
+      expect(signals.some((signal) => signal.aborted)).toBe(false);
+      again({ busyIds: new Set(['id1']), disabled: false, onAction: jest.fn() });
+      expect(screen.getByRole('button', { name: 'Resolve SAMPLE-PYTHON-2' })).toBeDisabled();
+      expect(screen.getByRole('button', { name: 'Resolve SAMPLE-PYTHON-1' })).toBeEnabled();
+    });
+
+    it('unmount aborts and logs nothing', async () => {
+      const spy = jest.spyOn(console, 'error').mockImplementation(() => {});
+      const rejects: Array<(reason: unknown) => void> = [];
+      const source = {
+        issueVolume: jest.fn(
+          (_id: string, _signal: AbortSignal) => new Promise<VolumeSeries>((_, reject) => rejects.push(reject))
+        ),
+      };
+      const { unmount } = renderTable(manyRows(3), undefined, source);
+      const signals = source.issueVolume.mock.calls.map((call) => call[1]);
+
+      unmount();
+      await act(async () =>
+        rejects.forEach((reject) => reject(Object.assign(new Error('aborted'), { name: 'AbortError' })))
+      );
+
+      expect(signals).toHaveLength(3);
+      expect(signals.every((signal) => signal.aborted)).toBe(true);
+      expect(spy).not.toHaveBeenCalled();
+      spy.mockRestore();
+    });
+
+    it('paging with the real limiter never starts the queued rows of the old page', async () => {
+      const limit = limiter(SPARKLINE_CONCURRENCY);
+      const started: string[] = [];
+      const settle = new Map<string, () => void>();
+      const source = {
+        issueVolume: (id: string, signal: AbortSignal) =>
+          limit(
+            () =>
+              new Promise<VolumeSeries>((resolve) => {
+                started.push(id);
+                settle.set(id, () => resolve({ times: [1], counts: [1], total: 1 }));
+              }),
+            signal
+          ).catch(() => ({ times: [1], counts: [0], total: 0 })),
+      };
+      renderTable(manyRows(30), undefined, source);
+      expect(started).toEqual(['id0', 'id1', 'id2', 'id3']);
+
+      fireEvent.click(screen.getByRole('button', { name: '2' }));
+      await act(async () => {});
+
+      expect(started).toEqual(['id0', 'id1', 'id2', 'id3', 'id25', 'id26', 'id27', 'id28']);
+
+      await act(async () => settle.get('id25')?.());
+
+      expect(started).toContain('id29');
+      expect(started).toHaveLength(9);
+    });
   });
 });
