@@ -1,0 +1,17 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+package main
+
+import (
+	"os"
+
+	"github.com/a-h-i/grafana-bugsink-app/pkg/plugin"
+	"github.com/grafana/grafana-plugin-sdk-go/backend/datasource"
+	"github.com/grafana/grafana-plugin-sdk-go/backend/log"
+)
+
+func main() {
+	if err := datasource.Manage("ahmedismail-bugsink-datasource", plugin.NewDatasource, datasource.ManageOpts{}); err != nil {
+		log.DefaultLogger.Error(err.Error())
+		os.Exit(1)
+	}
+}

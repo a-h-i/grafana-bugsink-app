@@ -11,13 +11,23 @@ of these values elsewhere.**
 
 ## Start and stop
 
-Run from the repository root.
+Run from the repository root. Build the plugin first, since Grafana mounts `dist/`:
+
+```sh
+npm ci
+npm run build
+npm run build:backend
+```
+
+Running `docker compose up` before the first build makes Docker create `./dist` owned by root, and the build then fails to write into it, so build first.
 
 ```sh
 docker compose up -d --wait --build   # start (builds the sample app), returns when everything is healthy
 docker compose down                   # stop, keep the data
 docker compose down -v                # stop and wipe the data; the next `up` seeds it again
 ```
+
+After a rebuild of the backend, run `docker compose restart grafana`.
 
 `bugsink-seed` runs once per `up` and exits; it creates the projects and tokens below and is safe to repeat.
 
@@ -57,15 +67,18 @@ The host scripts do not read `.env`; when a port is moved, export `BUGSINK_URL`,
 | Token `PROJECT_READ` | `c` repeated 40 times; bound to project 1; `projects:read`, `issues:read`, `events:read` |
 | Token `NO_CAPS` | `d` repeated 40 times; global, no capabilities |
 | DSN inside Compose | `http://11111111111111111111111111111111@bugsink:8000/1` |
-| Grafana data source UIDs | `tempo`, `loki` |
+| Grafana data source UIDs | `tempo`, `loki`, `bugsink` |
 
 Use a token as `Authorization: Bearer <token>`, for example
 `curl -H "Authorization: Bearer $(printf 'a%.0s' {1..40})" http://localhost:8800/api/canonical/0/projects/`.
 
 ## Grafana
 
-Anonymous access with role Admin; no login. The data sources `Tempo` (uid `tempo`) and `Loki` (uid `loki`) are
-provisioned from `docker/grafana/provisioning/datasources/datasources.yaml`.
+Anonymous access with role Admin; no login. The data sources `Tempo` (uid `tempo`), `Loki` (uid `loki`) and
+`Bugsink` (uid `bugsink`, type `ahmedismail-bugsink-datasource`) are provisioned from
+`docker/grafana/provisioning/datasources/datasources.yaml`. `Bugsink` points at the Compose Bugsink and uses the
+seeded `GLOBAL_READ` token, a public development-only value. The plugin app is enabled by
+`docker/grafana/provisioning/plugins/apps.yaml`.
 
 ## Sample app
 

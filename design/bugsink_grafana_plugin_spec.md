@@ -55,7 +55,7 @@
   * Query editor: query type (issues, events) and their parameters.
 * **Backend (`grafana-plugin-sdk-go`):**
   * Typed client generated from the pinned OpenAPI schema.
-  * Follows Bugsink's `next` cursor URLs for pagination; never builds cursors itself.
+  * Pages with the cursor Bugsink returns in `next`; never builds cursors itself, and never requests a URL taken from a response.
   * Short-lived cache per (data source, request) to absorb dashboard refreshes and App page re-renders.
   * Converts responses into DataFrames and attaches data links (§5).
   * Serves time series from Bugsink's hourly event counts (§6).
@@ -211,7 +211,7 @@ Decided on 2026-11-15:
 | An event whose trace is not in Tempo | The buttons show whenever a trace id exists; Tempo reports the missing trace | §4.D, §5 |
 | Attribution comments | On by default when the token has `issues:comment` | §4.E |
 | Open-issue count for alert rules | Page through the issue list and cache; ask Bugsink upstream for a count | §6 |
+| Code generated from the PolyForm Shield schema, compiled into the GPL plugin | Shipped without asking for permission; the owner accepted the risk on 2026-11-15. The generated client is confined to one package (`pkg/bugsink/internal/gen`), so a hand-written client can replace it if Bugsink B.V. objects | §9 |
 
 Still open:
-* Whether code that `oapi-codegen` generates from the Bugsink schema, which is licensed under PolyForm Shield 1.0.0, may be compiled into a plugin licensed `GPL-3.0-or-later` (§9; `bugsink-api/NOTICE.md`). The Bugsink maintainer is asked for written permission before M1 merges generated code; without it, M1 uses a hand-written client for the operations the plugin calls.
 * Whether the documented Python setup keeps the OTLP integration's propagator or sets `setup_propagator=False`. M6 tests both and documents the one that honours an incoming `traceparent` (§5).

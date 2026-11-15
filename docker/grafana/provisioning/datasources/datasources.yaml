@@ -12,3 +12,11 @@ datasources:
     uid: loki
     access: proxy
     url: http://loki:3100
+  - name: Bugsink
+    type: ahmedismail-bugsink-datasource
+    uid: bugsink
+    access: proxy
+    url: http://bugsink:8000
+    secureJsonData:
+      # Public development-only token from docker/bugsink/seed.py.
+      apiToken: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa

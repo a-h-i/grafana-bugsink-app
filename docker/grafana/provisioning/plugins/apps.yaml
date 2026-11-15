@@ -1,0 +1,7 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+apiVersion: 1
+
+apps:
+  - type: ahmedismail-bugsink-app
+    org_id: 1
+    disabled: false

@@ -1,0 +1,27 @@
+{
+  "$schema": "https://raw.githubusercontent.com/grafana/grafana/main/docs/sources/developers/plugins/plugin.schema.json",
+  "type": "datasource",
+  "name": "Bugsink",
+  "id": "ahmedismail-bugsink-datasource",
+  "backend": true,
+  "executable": "gpx_bugsink",
+  "metrics": true,
+  "info": {
+    "keywords": ["datasource"],
+    "description": "",
+    "author": {
+      "name": "Ahmed Ismail"
+    },
+    "logos": {
+      "small": "img/logo.svg",
+      "large": "img/logo.svg"
+    },
+    "screenshots": [],
+    "version": "%VERSION%",
+    "updated": "%TODAY%"
+  },
+  "dependencies": {
+    "grafanaDependency": ">=13.2.0",
+    "plugins": []
+  }
+}

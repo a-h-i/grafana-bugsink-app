@@ -69,16 +69,14 @@ The walking skeleton: every layer exists and is wired, with the smallest feature
 * **Scope:** `create-plugin` scaffold of the app with the nested backend data source; Go client
   generated with `oapi-codegen` v2.8.2 from the unmodified schema (`ogen` fails on it, findings Q11);
   config editor (base URL, API token in `secureJsonData`; for a project-bound token `GET /projects/`
-  returns its project, which the editor discovers; there is no project id field, findings Q5); `CheckHealth`
-  for URL, token and token kind, and for the capabilities the token lacks (no endpoint reports them, findings Q4:
-  one read per capability the configured features need; write capabilities are reported as not verified); Compose stack mounts and provisions the plugin; CI
+  returns its project, which the health check names; there is no project id field, findings Q5); `CheckHealth`
+  for URL and token, the projects the token can see, and the capabilities it lacks (no endpoint reports them, findings Q4:
+  one read per capability the configured features need; nothing is said about write capabilities until M7 adds a triage setting); Compose stack mounts and provisions the plugin; CI
   (lint, unit tests, build, end-to-end); license headers and `README.md`.
 * **Demo:** add the data source with a valid token and see success; with a wrong URL, a bad token and a
   token without capabilities, see a message that names the problem; with a project-bound token, see
   success.
 * **Plugin ids:** `ahmedismail-bugsink-app` and `ahmedismail-bugsink-datasource`.
-* **Needs first:** the Bugsink maintainer's written permission to ship code generated from the schema;
-  without it, a hand-written client for the operations the plugin calls replaces the generated one (see Open decisions).
 
 ### M2: Issues in dashboards
 
@@ -207,9 +205,8 @@ M7 to M10 following as minor versions.
 
 ## Open decisions
 
-Seven of the nine decisions were made on 2026-11-15 and are in the milestones above; spec §10 lists them.
+Eight of the nine decisions were made on 2026-11-15 and are in the milestones above; spec §10 lists them. Among them: the client generated from Bugsink's PolyForm Shield schema ships without asking for permission (risk accepted by the owner).
 
 | Decision | Needed by | Notes |
 | :--- | :--- | :--- |
-| Licence status of Go client code generated from the PolyForm Shield schema when compiled into the GPL plugin | M1 | Ask the Bugsink maintainer for written permission; the fallback is a hand-written client. Spec §10; findings Q11. |
 | `traceparent` propagation with the OTLP integration | M6 | Settled by a test of `setup_propagator=False` in M6. Spec §10. |

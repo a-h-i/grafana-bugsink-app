@@ -1,0 +1,6 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+package: gen
+output: client.gen.go
+generate:
+  models: true
+  client: true
