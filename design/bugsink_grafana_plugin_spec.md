@@ -49,7 +49,7 @@
 
 * **Packaging:** an app plugin (`ahmedismail-bugsink-app`) with a nested backend data source plugin (`ahmedismail-bugsink-datasource`), shipped and signed as one package under the grafana.com organization `ahmedismail`. The app has no backend of its own; every Bugsink call goes through a data source instance.
 * **Multiple Bugsink instances:** each is one data source instance. The App pages have a data source picker.
-* **Frontend (`@grafana/ui`, `@grafana/scenes`, React):**
+* **Frontend (React with `@grafana/ui`; no Scenes: the App's columns and controls are React cells and components):**
   * App pages: issue list, issue detail, event detail, triage controls.
   * Config editor: Bugsink base URL, API token, project scope, Tempo and Loki data sources, link templates, triage settings.
   * Query editor: query type (issues, events) and their parameters.
@@ -95,7 +95,10 @@
 ### D. App UI
 * **Issue list:**
   * Columns: Type (`calculated_type`), Message (`calculated_value`), Transaction, Project, Events (`digested_event_count`), First seen, Last seen, Status, Actions.
-  * Filters: project, status, time range. Sort: last seen, event count.
+  * An `Issue` column (`friendly_id`) carries the row link to Bugsink.
+  * Filters: project, status (all, open, unresolved, resolved, muted), search text, time range. Sort: last seen, event count, and arrival order within one project. The filter bar is the data source's query editor; the page runs the data source's issues query.
+  * 25 rows per page, paged in the browser. The page's state (data source, filters, sort, time range) lives in the URL; parameters the page does not own, such as `orgId` and `kiosk`, are kept as written.
+  * The default instance is Grafana's default data source when it is a Bugsink one, else the first by name. Switching instance clears the project.
   * Row link to the issue in Bugsink's own UI.
   * Event-count sparkline per row from `event-counts` (one call per visible row; see §6).
 * **Issue detail:** summary, event list, latest event shown by default.
@@ -216,6 +219,7 @@ Decided on 2026-11-15:
 | Open-issue count for alert rules | Page through the issue list and cache; ask Bugsink upstream for a count | §6 |
 | What the dashboard time range means for the issues query | Issues last seen within the range, both ends | §4.B |
 | Links to Bugsink when Grafana reaches it by an internal address | An optional Browser URL setting | §4.A |
+| How the App pages are built and get their data | Plain React with `@grafana/ui`; the issue list runs the data source's issues query | §3, §4.D |
 | Code generated from the PolyForm Shield schema, compiled into the GPL plugin | Shipped without asking for permission; the owner accepted the risk on 2026-11-15. The generated client is confined to one package (`pkg/bugsink/internal/gen`), so a hand-written client can replace it if Bugsink B.V. objects | §9 |
 
 Still open:

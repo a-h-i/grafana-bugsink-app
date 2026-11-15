@@ -15,6 +15,7 @@ datasources:
   - name: Bugsink
     type: ahmedismail-bugsink-datasource
     uid: bugsink
+    isDefault: true
     access: proxy
     url: http://bugsink:8000
     jsonData:
@@ -22,3 +23,13 @@ datasources:
     secureJsonData:
       # Public development-only token from docker/bugsink/seed.py.
       apiToken: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+  - name: Bugsink project-bound
+    type: ahmedismail-bugsink-datasource
+    uid: bugsink-project
+    access: proxy
+    url: http://bugsink:8000
+    jsonData:
+      browserUrl: http://localhost:8800
+    secureJsonData:
+      # Public development-only token from docker/bugsink/seed.py, bound to project 1.
+      apiToken: cccccccccccccccccccccccccccccccccccccccc

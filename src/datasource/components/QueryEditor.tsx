@@ -47,8 +47,10 @@ function projectOptions(projects: Project[], selected: number): Array<ComboboxOp
 }
 
 export function QueryEditor({ query, onChange, onRunQuery, datasource }: Props) {
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [loadError, setLoadError] = useState<string>();
+  const [loaded, setLoaded] = useState<{ source: BugsinkDataSource; projects: Project[]; error?: string }>();
+  const current = loaded?.source === datasource ? loaded : undefined;
+  const projects = useMemo(() => current?.projects ?? [], [current]);
+  const loadError = current?.error;
   const [draft, setDraft] = useState<string>();
   const search = draft ?? query.q ?? '';
 
@@ -56,8 +58,8 @@ export function QueryEditor({ query, onChange, onRunQuery, datasource }: Props) 
     let active = true;
     datasource
       .getProjects()
-      .then((list) => active && setProjects(list))
-      .catch((error) => active && setLoadError(errorMessage(error)));
+      .then((list) => active && setLoaded({ source: datasource, projects: list }))
+      .catch((error) => active && setLoaded({ source: datasource, projects: [], error: errorMessage(error) }));
     return () => {
       active = false;
     };
@@ -86,13 +88,14 @@ export function QueryEditor({ query, onChange, onRunQuery, datasource }: Props) 
   const applySearch = () => {
     setDraft(undefined);
     if (search !== (query.q ?? '')) {
-      update({ q: search });
+      onChange({ ...query, q: search });
     }
   };
 
   const onSearchKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key === 'Enter') {
       applySearch();
+      onRunQuery();
     }
   };
 
@@ -101,13 +104,7 @@ export function QueryEditor({ query, onChange, onRunQuery, datasource }: Props) 
       {loadError && <Alert severity="error" title={loadError} />}
       <InlineFieldRow>
         <Field label="Project">
-          <Combobox
-            aria-label="Project"
-            width={30}
-            options={options}
-            value={project}
-            onChange={onProjectChange}
-          />
+          <Combobox aria-label="Project" width={30} options={options} value={project} onChange={onProjectChange} />
         </Field>
         <Field label="State">
           <Combobox

@@ -25,7 +25,7 @@ type Datasource struct {
 	browserURL    string // base of links to Bugsink's pages, no trailing slash
 	healthTimeout time.Duration
 	issueCache    *cache[bugsink.IssueList]
-	projectCache  *cache[[]bugsink.Project]
+	projectCache  *cache[projectsResult]
 }
 
 var (
@@ -49,7 +49,7 @@ func NewDatasource(ctx context.Context, s backend.DataSourceInstanceSettings) (i
 		url:           s.URL,
 		healthTimeout: defaultHealthTimeout,
 		issueCache:    newCache[bugsink.IssueList](cacheTTL, cacheMaxEntries),
-		projectCache:  newCache[[]bugsink.Project](cacheTTL, cacheMaxEntries),
+		projectCache:  newCache[projectsResult](cacheTTL, cacheMaxEntries),
 	}
 	d.settingsErr = d.configure(ctx, s)
 	return d, nil

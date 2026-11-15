@@ -2,7 +2,7 @@
 
 Connects Grafana to a self-hosted [Bugsink](https://www.bugsink.com/) error tracker.
 
-It adds a Bugsink data source. The data source checks the Bugsink address and the API token you give it, and tells you what is wrong when the check fails. It also queries issues for dashboards and Explore. Events are not available yet.
+It adds a Bugsink data source. The data source checks the Bugsink address and the API token you give it, and tells you what is wrong when the check fails. It also queries issues for dashboards and Explore, and the app has a page that lists issues. Events are not available yet.
 
 ## Requirements
 
@@ -17,7 +17,7 @@ Create the token in Bugsink. A token has capabilities, and it can be bound to on
 ## Add the data source
 
 1. Enable the app if it is not enabled yet: in Grafana, open Administration > Plugins and data > Plugins, choose Bugsink and enable it.
-2. Open the Bugsink app. It lists your Bugsink data sources. With none, it shows `No Bugsink data source yet.` and the link `Add a Bugsink data source`.
+2. Open the Bugsink app. It shows the issue list (see below). With no Bugsink data source, it shows `No Bugsink data source yet.` and the link `Add a Bugsink data source`.
 3. Follow that link, or open Connections > Data sources > Add new data source, and choose **Bugsink**.
 4. Fill in the fields:
    - **Bugsink URL**: the address of Bugsink itself, for example `https://bugsink.example.com`. Do not add `/api`.
@@ -27,9 +27,23 @@ Create the token in Bugsink. A token has capabilities, and it can be bound to on
 
 The test makes at least one read request per capability and reports the result. It stops at the first answer that ends the check: a connection error or timeout, a rejected token, an answer that is not Bugsink's, or an unexpected answer to a capability check.
 
+## Browsing issues in the app
+
+The Bugsink app opens on a page that lists issues. You need at least one Bugsink data source.
+
+- **Data source**: the picker at the top lists your Bugsink data sources. The default data source is selected first; without a default, the first one by name. Changing the data source clears the Project filter and, if Sort by is `Arrival order`, resets it to `Last seen`.
+- **Filters**: Project, State, Sort by, Order and Search are the controls of the query editor, described under [Query controls](#query-controls). They apply when you change them; Search applies when you leave the field or press Enter.
+- **Time range**: the picker at the top right. The default is the last 7 days. The page shows issues last seen within the range. The refresh button runs the query again; within 15 seconds of the same query it shows the same answer (see [Limits](#limits)).
+- **Table**: 25 issues per page, with the columns Issue, Type, Message, Transaction, Project, Events, First seen, Last seen and Status. The Issue column links to the issue in Bugsink, in a new tab, as described under [Link to Bugsink](#link-to-bugsink).
+- **States**: on the first load and after you change the data source, the page shows `Loading issues...`. A later load keeps the table on screen and shows a loading bar above it. When nothing matches, it shows `No issues match these filters in this time range.` A failed read shows the error message.
+
+The address bar holds the whole state: data source, filters, time range, sort and order. Copy the address to reopen the same list. The page keeps the address parameters it does not use, such as `orgId` and `kiosk`, as they are.
+
+The page has the limits of [Limits](#limits): at most 5000 issues are read and results can be up to 15 seconds old.
+
 ## Querying issues
 
-Add a panel, or open Explore, choose the Bugsink data source and set the query. Every change to a control runs the query again; Search runs when you leave the field or press Enter. The result is a table with one row per issue.
+Add a panel, or open Explore, choose the Bugsink data source and set the query. Every change to a control runs the query again. Search is applied when you leave the field and runs when you press Enter, click Run query in Explore or refresh the panel. The result is a table with one row per issue.
 
 ### Query controls
 
@@ -39,7 +53,7 @@ Add a panel, or open Explore, choose the Bugsink data source and set the query. 
 | State | Keeps only issues in that state: `All`, `Open`, `Unresolved`, `Resolved` or `Muted`. | Unresolved |
 | Sort by | `Last seen`, `Event count` or `Arrival order`. `Arrival order` needs a project: it is not offered with `All projects`. | Last seen |
 | Order | `Descending` or `Ascending`. | Descending |
-| Search | Bugsink's search text, for example `environment:production release:1.4.2`. It is sent when you leave the field or press Enter. It accepts dashboard variables, for example `environment:$environment`. The other controls do not. | empty |
+| Search | Bugsink's search text, for example `environment:production release:1.4.2`. It is applied when you leave the field and sent when you press Enter or run the query. It accepts dashboard variables, for example `environment:$environment`. The other controls do not. | empty |
 
 ### Columns
 

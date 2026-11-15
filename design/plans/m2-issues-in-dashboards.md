@@ -418,3 +418,4 @@ getProjects(): Promise<Project[]>
 10. The project picker lists the projects by name. The `id` column is visible in tables and documented.
 11. The end-to-end tests report one event per run from a Playwright setup project (`tests/report-event.setup.ts`), and the refused-query test has its own provisioned dashboard (`bugsink-e2e-refused.json`).
 12. Left for later milestones: failed project reads are not cached (M3); the resource mux is rebuilt per call and its 404/405 bodies are untested (M4); a project dashboard variable; merging concurrent identical cache misses.
+13. Changed in M3: leaving the `Search` field applies the text without running the query; Enter applies it and runs. Running on blur let a click on Explore's Run button cancel the query it had just started.

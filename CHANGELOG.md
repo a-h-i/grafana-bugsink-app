@@ -6,3 +6,4 @@
 - Issues query: list the issues last seen within the dashboard time range as a table, in dashboards and Explore, with a link to each issue in Bugsink.
 - Query editor with Project, State, Sort by, Order and Search controls.
 - `Browser URL` setting: the address of Bugsink as the browser reaches it, used for the issue links.
+- Issue list page in the app: pick a Bugsink instance, filter by project, state, search and time range, sort by last seen or event count, link to each issue in Bugsink; the page state is kept in the URL.

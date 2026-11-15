@@ -111,6 +111,12 @@ func (f *fakeBugsink) issueRequests() []url.Values {
 	return append([]url.Values(nil), f.requests...)
 }
 
+func (f *fakeBugsink) projectRequests() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.projectCalls
+}
+
 func (f *fakeBugsink) datasource(t *testing.T) *Datasource {
 	return newInstance(t, f.srv.URL, secretToken, `{"browserUrl":"http://b"}`)
 }
@@ -388,5 +394,58 @@ func TestQueryTwoQueries(t *testing.T) {
 	}
 	if r := resp.Responses["B"]; r.Error == nil || r.Error.Error() != `Unknown state "bogus".` {
 		t.Fatalf("B error %v", r.Error)
+	}
+}
+
+const capabilityDenied = `{"detail":"This token does not have the required capability: projects:read."}`
+
+func TestProjectsFailureIsRemembered(t *testing.T) {
+	f := newFakeBugsink(t)
+	f.projectsStatus, f.errorBody = 403, capabilityDenied
+	f.pages = []string{inRange("A-1")}
+	ds := f.datasource(t)
+	for i := 0; i < 2; i++ {
+		frame := frameOf(t, runQuery(t, ds, `{}`))
+		if got := frame.Fields[4].At(0); got != "1" {
+			t.Fatalf("query %d: project %v, want \"1\"", i, got)
+		}
+	}
+	r := callResource(t, ds, "GET", "projects")
+	if r.status != 502 || messageOf(t, r) != "The API token lacks projects:read." {
+		t.Fatalf("status %d body %s", r.status, r.body)
+	}
+	if n := f.projectRequests(); n != 1 {
+		t.Fatalf("%d project requests, want 1", n)
+	}
+}
+
+func TestProjectsFailureExpires(t *testing.T) {
+	f := newFakeBugsink(t)
+	f.projectsStatus, f.errorBody = 403, capabilityDenied
+	ds := f.datasource(t)
+	_, _ = ds.projects(context.Background())
+	_, _ = ds.projects(context.Background())
+	if n := f.projectRequests(); n != 1 {
+		t.Fatalf("%d project requests before expiry, want 1", n)
+	}
+	ds.projectCache.now = func() time.Time { return time.Now().Add(cacheTTL + time.Second) }
+	_, _ = ds.projects(context.Background())
+	if n := f.projectRequests(); n != 2 {
+		t.Fatalf("%d project requests, want 2", n)
+	}
+}
+
+func TestProjectsCancelledReadIsNotRemembered(t *testing.T) {
+	f := newFakeBugsink(t)
+	f.projectsBody = `{"id":1,"name":"alpha"},{"id":2,"name":"beta"}`
+	ds := f.datasource(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := ds.projects(ctx); err == nil {
+		t.Fatal("cancelled read succeeded")
+	}
+	projects, err := ds.projects(context.Background())
+	if err != nil || len(projects) != 2 {
+		t.Fatalf("projects %v, err %v", projects, err)
 	}
 }

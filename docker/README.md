@@ -67,7 +67,7 @@ The host scripts do not read `.env`; when a port is moved, export `BUGSINK_URL`,
 | Token `PROJECT_READ` | `c` repeated 40 times; bound to project 1; `projects:read`, `issues:read`, `events:read` |
 | Token `NO_CAPS` | `d` repeated 40 times; global, no capabilities |
 | DSN inside Compose | `http://11111111111111111111111111111111@bugsink:8000/1` |
-| Grafana data source UIDs | `tempo`, `loki`, `bugsink` |
+| Grafana data source UIDs | `tempo`, `loki`, `bugsink`, `bugsink-project` |
 
 Use a token as `Authorization: Bearer <token>`, for example
 `curl -H "Authorization: Bearer $(printf 'a%.0s' {1..40})" http://localhost:8800/api/canonical/0/projects/`.
@@ -75,11 +75,13 @@ Use a token as `Authorization: Bearer <token>`, for example
 ## Grafana
 
 Anonymous access with role Admin; no login. The data sources `Tempo` (uid `tempo`), `Loki` (uid `loki`) and
-`Bugsink` (uid `bugsink`, type `ahmedismail-bugsink-datasource`) are provisioned from
+`Bugsink` (uid `bugsink`, the default data source, type `ahmedismail-bugsink-datasource`) are provisioned from
 `docker/grafana/provisioning/datasources/datasources.yaml`. `Bugsink` points at the Compose Bugsink and uses the
 seeded `GLOBAL_READ` token, a public development-only value, and `Browser URL` `http://localhost:8800`, so
-issue links open the Bugsink on the host. The plugin app is enabled by
-`docker/grafana/provisioning/plugins/apps.yaml`.
+issue links open the Bugsink on the host. `Bugsink project-bound` (uid `bugsink-project`) is the same instance with the
+`PROJECT_READ` token, which sees only `sample-python`. The plugin app is enabled by
+`docker/grafana/provisioning/plugins/apps.yaml`; its issue list page opens at
+<http://localhost:3300/a/ahmedismail-bugsink-app>.
 
 ### Dashboards
 

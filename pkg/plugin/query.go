@@ -142,17 +142,23 @@ func filterKey(f bugsink.IssueFilter) string {
 	return fmt.Sprintf("%d|%s|%q|%s|%s", f.ProjectID, f.State, f.Query, f.Sort, f.Order)
 }
 
-// projects returns the project list through the cache.
+// projectsResult is a project read with its error, kept in the cache.
+type projectsResult struct {
+	projects []bugsink.Project
+	err      error
+}
+
+// projects returns the project list through the cache; a failed read is cached too, unless it timed out or was cancelled.
 func (d *Datasource) projects(ctx context.Context) ([]bugsink.Project, error) {
 	if cached, ok := d.projectCache.get(""); ok {
-		return cached, nil
+		return cached.projects, cached.err
 	}
 	projects, err := d.client.ListProjects(ctx)
-	if err != nil {
+	if isTimeout(err) {
 		return nil, err
 	}
-	d.projectCache.set("", projects)
-	return projects, nil
+	d.projectCache.set("", projectsResult{projects: projects, err: err})
+	return projects, err
 }
 
 // projectNames maps project ids to names; it is empty when the project list cannot be read.

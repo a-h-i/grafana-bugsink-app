@@ -51,9 +51,7 @@ test.describe('issues in dashboards', () => {
   });
 
   test("project picker lists the token's projects", async ({ panelEditPage, page, selectors }) => {
-    const projects = page.waitForResponse((response) => response.url().endsWith('/resources/projects'));
     await pickBugsink(panelEditPage, page, selectors);
-    await projects;
     await page.getByRole('combobox', { name: 'Project' }).click();
     await expect(page.getByRole('option')).toHaveText(['All projects', 'sample-js', 'sample-python']);
   });
@@ -65,9 +63,14 @@ test.describe('issues in dashboards', () => {
     await page.getByRole('option', { name: 'sample-python' }).click();
     const search = page.getByRole('textbox', { name: 'Search' });
     await search.fill(EVENT_MARKER);
+    const answered = page.waitForResponse(
+      (response) =>
+        response.url().includes('/api/ds/query') && (response.request().postData() ?? '').includes(EVENT_MARKER)
+    );
     await search.press('Enter');
+    await answered;
     await expect(async () => {
-      await explorePage.runQuery();
+      await explorePage.runQuery({ timeout: 10_000 });
       await expect(explorePage.tablePanel.data).toContainText([EVENT_MARKER]);
     }).toPass();
   });

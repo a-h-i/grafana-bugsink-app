@@ -33,3 +33,25 @@ export interface Project {
   id: number;
   name: string;
 }
+
+export type IssueStatus = 'open' | 'resolved' | 'muted';
+
+export interface IssueRow {
+  id: string;
+  friendlyId: string;
+  type: string;
+  message: string;
+  transaction: string;
+  project: string;
+  projectId: number;
+  status: IssueStatus;
+  events: number;
+  firstSeen: number;
+  lastSeen: number;
+  url?: string;
+}
+
+export interface IssueList {
+  rows: IssueRow[];
+  notice?: string;
+}

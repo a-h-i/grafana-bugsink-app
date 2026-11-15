@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import React from 'react';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { BugsinkDataSource } from '../datasource';
 import { BugsinkQuery } from '../types';
 import { QueryEditor } from './QueryEditor';
@@ -94,7 +94,7 @@ describe('QueryEditor', () => {
     expect(onRunQuery).toHaveBeenCalledTimes(3);
   });
 
-  it('typing in Search changes nothing until blur', async () => {
+  it('typing in Search changes nothing until blur, and blur applies the text without running', async () => {
     const { onChange, onRunQuery } = await renderEditor();
     const search = screen.getByRole('textbox', { name: 'Search' });
 
@@ -104,6 +104,31 @@ describe('QueryEditor', () => {
 
     fireEvent.blur(search);
     expect(lastCall(onChange).q).toBe('environment:production');
+    expect(onRunQuery).not.toHaveBeenCalled();
+  });
+
+  it('Enter after blur runs the applied text', async () => {
+    const onChange = jest.fn();
+    const onRunQuery = jest.fn();
+    const datasource = { getProjects: () => Promise.resolve(PROJECTS) } as unknown as BugsinkDataSource;
+    const { rerender } = render(
+      <QueryEditor datasource={datasource} query={{ refId: 'A' }} onChange={onChange} onRunQuery={onRunQuery} />
+    );
+    const search = await screen.findByRole('textbox', { name: 'Search' });
+    fireEvent.change(search, { target: { value: 'release:1.4.2' } });
+    fireEvent.blur(search);
+    rerender(
+      <QueryEditor
+        datasource={datasource}
+        query={{ refId: 'A', q: 'release:1.4.2' }}
+        onChange={onChange}
+        onRunQuery={onRunQuery}
+      />
+    );
+
+    fireEvent.keyDown(search, { key: 'Enter' });
+
+    expect(onChange).toHaveBeenCalledTimes(1);
     expect(onRunQuery).toHaveBeenCalledTimes(1);
   });
 
@@ -176,5 +201,41 @@ describe('QueryEditor', () => {
     await renderEditor({}, () => Promise.reject(new Error('')));
 
     expect(await screen.findByText('Could not load the projects.')).toBeInTheDocument();
+  });
+
+  it("forgets the previous data source's projects", async () => {
+    const failing = {
+      getProjects: () => Promise.reject({ data: { message: 'Bugsink rejected the API token.' } }),
+    } as unknown as BugsinkDataSource;
+    const other = { getProjects: () => Promise.resolve([{ id: 3, name: 'other' }]) } as unknown as BugsinkDataSource;
+    const props = { query: { refId: 'A' }, onChange: jest.fn(), onRunQuery: jest.fn() };
+
+    const { rerender } = render(<QueryEditor datasource={failing} {...props} />);
+    expect(await screen.findByText('Bugsink rejected the API token.')).toBeInTheDocument();
+
+    rerender(<QueryEditor datasource={other} {...props} />);
+    await waitFor(() => expect(screen.queryByText('Bugsink rejected the API token.')).not.toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole('combobox', { name: 'Project' }));
+    const names = (await screen.findAllByRole('option')).map((option) => option.textContent);
+    expect(names).toEqual(['All projects', 'other']);
+  });
+
+  it('ignores a late answer from the previous data source', async () => {
+    let resolveFirst: (projects: unknown) => void = () => {};
+    const first = {
+      getProjects: () => new Promise((resolve) => (resolveFirst = resolve)),
+    } as unknown as BugsinkDataSource;
+    const other = { getProjects: () => Promise.resolve([{ id: 3, name: 'other' }]) } as unknown as BugsinkDataSource;
+    const props = { query: { refId: 'A' }, onChange: jest.fn(), onRunQuery: jest.fn() };
+
+    const { rerender } = render(<QueryEditor datasource={first} {...props} />);
+    rerender(<QueryEditor datasource={other} {...props} />);
+    fireEvent.click(screen.getByRole('combobox', { name: 'Project' }));
+    await screen.findByRole('option', { name: 'other' });
+    await act(async () => resolveFirst([{ id: 1, name: 'stale' }]));
+
+    const names = (await screen.findAllByRole('option')).map((option) => option.textContent);
+    expect(names).toEqual(['All projects', 'other']);
   });
 });

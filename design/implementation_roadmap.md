@@ -96,6 +96,9 @@ Built; see [`plans/m2-issues-in-dashboards.md`](plans/m2-issues-in-dashboards.md
 
 ### M3: Issue list page
 
+Built; see [`plans/m3-issue-list-page.md`](plans/m3-issue-list-page.md). The page is plain React, runs the data
+source's issues query, reuses the query editor as its filter bar and keeps its state in the URL.
+
 * **Scope:** App page with data source picker; issue list with the columns of §4.D except sparkline and
   actions; project, status and time-range filters; sort by last seen and event count; row link to
   Bugsink; empty, loading and error states.
