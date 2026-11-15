@@ -13,6 +13,7 @@ import urllib.request
 BUGSINK = os.environ.get("BUGSINK_URL", "http://localhost:8800").rstrip("/")
 GRAFANA = os.environ.get("GRAFANA_URL", "http://localhost:3300").rstrip("/")
 SAMPLE = os.environ.get("SAMPLE_PYTHON_URL", "http://localhost:8810").rstrip("/")
+SAMPLE_JS = os.environ.get("SAMPLE_JS_URL", "http://localhost:8820").rstrip("/")
 # Seeded GLOBAL_READ token: a public, development-only value.
 GLOBAL_READ = "a" * 40
 SETTLE_S = 10
@@ -57,8 +58,8 @@ def poll(check, deadline_s=30):
         time.sleep(0.5)
 
 
-def lookup_event(event_id):
-    return bugsink(f"events/lookup/?project=1&event_id={event_id}")
+def lookup_event(event_id, project=1):
+    return bugsink(f"events/lookup/?project={project}&event_id={event_id}")
 
 
 def trace_id_of(event):
@@ -69,11 +70,11 @@ def span_count(trace):
     return sum(len(s["spans"]) for b in trace["batches"] for s in b["scopeSpans"])
 
 
-def loki_lines(trace_id):
+def loki_lines(trace_id, service):
     now = time.time_ns()
     result = grafana_proxy(
         "loki/loki/api/v1/query_range",
-        query=f'{{service_name="sample-python"}} | trace_id="{trace_id}"',
+        query=f'{{service_name="{service}"}} | trace_id="{trace_id}"',
         start=now - 15 * 60 * 10**9,
         end=now,
         limit=100,
@@ -81,14 +82,18 @@ def loki_lines(trace_id):
     return [v for stream in result["data"]["result"] for v in stream["values"]]
 
 
-def check_handled(state):
-    handled = request(f"{SAMPLE}/handled") or {}
+def check_handled(state, sample=SAMPLE, label="sample", incoming=None):
+    headers = {"traceparent": f"00-{incoming}-{os.urandom(8).hex()}-01"} if incoming else None
+    handled = request(f"{sample}/handled", headers=headers) or {}
     state["trace_id"], state["event_id"] = handled.get("trace_id"), handled.get("event_id")
-    return bool(all(state.values())), f"sample /handled returned trace_id={state['trace_id']} event_id={state['event_id']}"
+    message = f"{label} /handled returned trace_id={state['trace_id']} event_id={state['event_id']}"
+    if incoming:
+        return bool(all(state.values())) and state["trace_id"] == incoming, f"{message}, sent traceparent trace id {incoming}"
+    return bool(all(state.values())), message
 
 
-def check_bugsink_event(state):
-    event = poll(lambda: lookup_event(state["event_id"]))
+def check_bugsink_event(state, project=1):
+    event = poll(lambda: lookup_event(state["event_id"], project))
     seen = trace_id_of(event) if event else None
     state["issue_id"] = event["issue"] if event else None
     return seen == state["trace_id"], f"bugsink event {state['event_id']} has trace id {seen}"
@@ -109,9 +114,16 @@ def check_tempo(state):
     return spans >= 1, f"tempo trace {state['trace_id']} has {spans} span(s)"
 
 
-def check_loki(state):
-    lines = poll(lambda: loki_lines(state["trace_id"]))
+def check_loki(state, service="sample-python"):
+    lines = poll(lambda: loki_lines(state["trace_id"], service))
     return bool(lines), f"loki has {len(lines or [])} line(s) with trace_id {state['trace_id']}"
+
+
+def check_traceparent(state):
+    incoming = os.urandom(16).hex()
+    headers = {"traceparent": f"00-{incoming}-{os.urandom(8).hex()}-01"}
+    seen = (request(f"{SAMPLE}/handled", headers=headers) or {}).get("trace_id")
+    return seen == incoming, f"traceparent {incoming} answered as trace id {seen}"
 
 
 def check_no_trace(state):
@@ -127,31 +139,41 @@ def check_no_trace(state):
     return not found, f"no-trace event: trace id {orphan} present in Bugsink, {where}"
 
 
-# (name, check, needs a successful check 1)
+# (name, check, name of the check it needs or None, state key)
 CHECKS = [
-    ("sample /handled", check_handled, False),
-    ("bugsink event", check_bugsink_event, True),
-    ("bugsink issue search", check_bugsink_issue, True),
-    ("tempo trace", check_tempo, True),
-    ("loki logs", check_loki, True),
-    ("no-trace event", check_no_trace, False),
+    ("sample /handled", check_handled, None, "python"),
+    ("bugsink event", check_bugsink_event, "sample /handled", "python"),
+    ("bugsink issue search", check_bugsink_issue, "sample /handled", "python"),
+    ("tempo trace", check_tempo, "sample /handled", "python"),
+    ("loki logs", check_loki, "sample /handled", "python"),
+    ("no-trace event", check_no_trace, None, "python"),
+    ("traceparent kept", check_traceparent, None, "python"),
+    (
+        "sample-js /handled",
+        lambda state: check_handled(state, SAMPLE_JS, "sample-js", incoming=os.urandom(16).hex()),
+        None,
+        "js",
+    ),
+    ("sample-js bugsink event", lambda state: check_bugsink_event(state, project=2), "sample-js /handled", "js"),
+    ("sample-js tempo trace", check_tempo, "sample-js /handled", "js"),
+    ("sample-js loki logs", lambda state: check_loki(state, "sample-js"), "sample-js /handled", "js"),
 ]
 
 
 def main():
-    state = {}
-    passed = []
-    for name, check, needs_handled in CHECKS:
-        if needs_handled and not passed[0]:
-            ok, message = False, f"{name}: skipped, /handled check failed"
+    states = {"python": {}, "js": {}}
+    passed = {}
+    for name, check, needs, key in CHECKS:
+        if needs is not None and not passed[needs]:
+            ok, message = False, f"{name}: skipped, {needs} check failed"
         else:
             try:
-                ok, message = check(state)
+                ok, message = check(states[key])
             except (RequestFailed, KeyError, TypeError, AttributeError, ValueError) as err:
                 ok, message = False, f"{name}: {type(err).__name__}: {err}"
-        passed.append(ok)
+        passed[name] = ok
         print(("ok   " if ok else "FAIL ") + message)
-    return 0 if all(passed) else 1
+    return 0 if all(passed.values()) else 1
 
 
 if __name__ == "__main__":

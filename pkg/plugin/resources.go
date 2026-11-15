@@ -17,6 +17,7 @@ import (
 	"github.com/a-h-i/grafana-bugsink-app/pkg/bugsink"
 	"github.com/google/uuid"
 	"github.com/grafana/grafana-plugin-sdk-go/backend"
+	"github.com/grafana/grafana-plugin-sdk-go/data"
 )
 
 // maxTagValues is the number of values listed per tag key.
@@ -341,6 +342,7 @@ type eventBody struct {
 	StacktraceMd *string          `json:"stacktraceMd"`
 	Notices      []string         `json:"notices"`
 	BugsinkURL   string           `json:"bugsinkUrl"`
+	Links        []data.DataLink  `json:"links"`
 }
 
 func keyValuesJSON(list []bugsink.KeyValue) []keyValueBody {
@@ -369,7 +371,7 @@ func exceptionsJSON(list []bugsink.Exception) []exceptionBody {
 	return out
 }
 
-func eventJSON(e bugsink.EventDetail, project, browserURL string) eventBody {
+func eventJSON(e bugsink.EventDetail, project, browserURL string, links linkSettings) eventBody {
 	contexts := make([]contextBody, 0, len(e.Contexts))
 	for _, c := range e.Contexts {
 		contexts = append(contexts, contextBody{Name: c.Name, Fields: keyValuesJSON(c.Fields)})
@@ -385,6 +387,11 @@ func eventJSON(e bugsink.EventDetail, project, browserURL string) eventBody {
 	if e.StacktraceMD != "" {
 		stacktraceMd = &e.StacktraceMD
 	}
+	eventLinks := []data.DataLink{}
+	if traceIDPattern.MatchString(e.TraceID) {
+		logsQuery := renderLogsQuery(links.logsQuery, links.vars(e.TraceID, project, &e))
+		eventLinks = append(eventLinks, links.exploreLinks(e.TraceID, logsQuery, e.Timestamp.Add(-links.window), e.Timestamp.Add(links.window))...)
+	}
 	return eventBody{
 		ID: e.ID, EventID: e.EventID, IssueID: e.IssueID, ProjectID: e.ProjectID, Project: project,
 		Timestamp: e.Timestamp, IngestedAt: e.IngestedAt,
@@ -393,6 +400,7 @@ func eventJSON(e bugsink.EventDetail, project, browserURL string) eventBody {
 		Tags: keyValuesJSON(e.Tags), Contexts: contexts, Exceptions: exceptionsJSON(e.Exceptions),
 		Breadcrumbs: breadcrumbs, StacktraceMd: stacktraceMd, Notices: eventNotices(e),
 		BugsinkURL: browserURL + "/issues/issue/" + e.IssueID + "/event/" + e.ID + "/",
+		Links:      eventLinks,
 	}
 }
 
@@ -441,7 +449,7 @@ func (d *Datasource) handleEvent(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		project = strconv.Itoa(event.ProjectID)
 	}
-	writeJSON(w, http.StatusOK, eventJSON(event, project, d.browserURL))
+	writeJSON(w, http.StatusOK, eventJSON(event, project, d.browserURL, d.links))
 }
 
 func writeMessage(w http.ResponseWriter, status int, message string) {

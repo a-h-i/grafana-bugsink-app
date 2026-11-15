@@ -653,7 +653,7 @@
      "type": "log",
      "level": "info",
      "category": "uvicorn.access",
-     "message": "127.0.0.1:50650 - \"GET /error?variant=60 HTTP/1.1\" 500",
+     "message": "client - \"GET /error?variant=60 HTTP/1.1\" 500",
      "timestamp": "2026-11-13T23:29:57.355717Z",
      "data": {}
     }

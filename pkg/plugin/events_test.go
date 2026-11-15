@@ -96,7 +96,7 @@ func TestEventsQueryNamingNothing(t *testing.T) {
 				t.Fatalf("got %v, want no error", r.Error)
 			}
 			frame := frameOf(t, r)
-			if frame.Name != "events" || len(frame.Fields) != 8 || frame.Rows() != 0 {
+			if frame.Name != "events" || len(frame.Fields) != 10 || frame.Rows() != 0 {
 				t.Fatalf("frame %q with %d fields and %d rows", frame.Name, len(frame.Fields), frame.Rows())
 			}
 			if len(frame.Meta.Notices) != 1 || frame.Meta.Notices[0].Severity != data.NoticeSeverityInfo || frame.Meta.Notices[0].Text != message {
@@ -332,5 +332,53 @@ func TestTwoQueryTypes(t *testing.T) {
 	a, b := frameOf(t, resp.Responses["A"]), frameOf(t, resp.Responses["B"])
 	if a.Name != "issues" || b.Name != "events" || a.RefID != "A" || b.RefID != "B" {
 		t.Fatalf("frames %q/%q refs %q/%q", a.Name, b.Name, a.RefID, b.RefID)
+	}
+}
+
+func TestTraceIDOf(t *testing.T) {
+	for query, want := range map[string]string{
+		"trace:abc": "abc", "x trace:abc trace:def": "abc", "notrace:abc": "", "trace:": "", "": "",
+	} {
+		if got := traceIDOf(query); got != want {
+			t.Errorf("traceIDOf(%q) = %q, want %q", query, got, want)
+		}
+	}
+}
+
+func TestEventRowsCarryTraceIDs(t *testing.T) {
+	f := newFakeBugsink(t)
+	ids, page := traceIssues(2)
+	f.pages = []string{page}
+	f.eventPages = map[string][]string{
+		ids[0]: {eventAt(uuidN(101), uuidN(201), ids[0], olderThanRange)},
+		ids[1]: {eventAt(uuidN(103), uuidN(203), ids[1], olderThanRange)},
+		defaultIssueUUID: {eventAt(uuidN(104), uuidN(204), defaultIssueUUID, olderThanRange)},
+	}
+	ds := f.datasource(t)
+	if got := stringColumn(t, frameOf(t, runQuery(t, ds, `{"queryType":"events","q":"trace:abc"}`)), "trace_id"); !reflect.DeepEqual(got, []string{"abc", "abc"}) {
+		t.Errorf("trace query: %v", got)
+	}
+	if got := stringColumn(t, frameOf(t, runQuery(t, ds, `{"queryType":"events","issue":"SAMPLE-PYTHON-2","q":"trace:abc"}`)), "trace_id"); !reflect.DeepEqual(got, []string{"abc"}) {
+		t.Errorf("issue query with a trace term: %v", got)
+	}
+	if got := stringColumn(t, frameOf(t, runQuery(t, ds, `{"queryType":"events","issue":"SAMPLE-PYTHON-2"}`)), "trace_id"); !reflect.DeepEqual(got, []string{""}) {
+		t.Errorf("issue query: %v", got)
+	}
+}
+
+func TestEventLookupCarriesPayloadTraceID(t *testing.T) {
+	f := newFakeBugsink(t)
+	_, body := eventFixture(t, "python-unhandled")
+	f.lookupBody = body
+	frame := frameOf(t, runQuery(t, f.datasource(t), `{"queryType":"events","eventId":"426ac644fafb475d905046d654730f1b","project":1}`))
+	if got := stringColumn(t, frame, "trace_id"); !reflect.DeepEqual(got, []string{"97dc67918c526f3d407fdcec08e956da"}) {
+		t.Fatalf("trace ids %v", got)
+	}
+	wantQuery := `{service_name="sample-python"} | trace_id="97dc67918c526f3d407fdcec08e956da"`
+	if got := stringColumn(t, frame, "logs_query"); !reflect.DeepEqual(got, []string{wantQuery}) {
+		t.Fatalf("logs queries %v", got)
+	}
+	if n := f.requestCount(); n != 3 {
+		t.Fatalf("%d Bugsink requests, want the lookup, the issue and the project list: %v", n, f.paths)
 	}
 }

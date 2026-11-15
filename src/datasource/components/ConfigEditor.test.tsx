@@ -2,8 +2,32 @@
 import React, { useState } from 'react';
 import { DataSourcePluginOptionsEditorProps } from '@grafana/data';
 import { fireEvent, render, screen } from '@testing-library/react';
+
 import { BugsinkOptions, BugsinkSecureJsonData } from '../types';
 import { ConfigEditor } from './ConfigEditor';
+
+jest.mock('@grafana/runtime', () => ({
+  ...jest.requireActual('@grafana/runtime'),
+  DataSourcePicker: ({
+    type,
+    current,
+    onChange,
+    onClear,
+    inputId,
+  }: {
+    type: string;
+    current: string | null;
+    onChange: (ds: { uid: string }) => void;
+    onClear: () => void;
+    inputId: string;
+  }) => (
+    <div>
+      <span data-testid={inputId}>{current ?? 'none'}</span>
+      <button onClick={() => onChange({ uid: `${type}-uid` })}>{`pick ${type}`}</button>
+      <button onClick={onClear}>{`clear ${type}`}</button>
+    </div>
+  ),
+}));
 
 type Options = DataSourcePluginOptionsEditorProps<BugsinkOptions, BugsinkSecureJsonData>['options'];
 
@@ -104,5 +128,96 @@ describe('ConfigEditor', () => {
     renderEditor();
 
     expect(screen.getByText(/projects:read, issues:read and events:read/)).toBeInTheDocument();
+  });
+
+  describe('trace and log links', () => {
+    it('has a heading and the five fields with their descriptions and defaults', () => {
+      renderEditor();
+
+      expect(screen.getByRole('heading', { level: 3, name: 'Trace and log links' })).toBeInTheDocument();
+      expect(screen.getByText('Tempo data source')).toBeInTheDocument();
+      expect(screen.getByText('Open trace runs a trace ID query here.')).toBeInTheDocument();
+      expect(screen.getByText('Loki data source')).toBeInTheDocument();
+      expect(screen.getByText('Open logs runs the logs query here.')).toBeInTheDocument();
+      expect(screen.getByText('Links open this many minutes before and after the event.')).toBeInTheDocument();
+      expect(screen.getByText(/Variables: \$\{trace_id\}, \$\{service\}, \$\{project\}/)).toBeInTheDocument();
+      expect(
+        screen.getByText(/Put every variable inside double quotes\. Values are not escaped for regular expressions\./)
+      ).toBeInTheDocument();
+      expect(screen.getByText(/The event tag that holds the service name/)).toBeInTheDocument();
+      expect(screen.getByText('minutes')).toBeInTheDocument();
+      expect(screen.getByLabelText('Time window')).toHaveValue(null);
+      expect(screen.getByLabelText('Time window')).toHaveAttribute('placeholder', '15');
+      expect(screen.getByLabelText('Service tag')).toHaveValue('service');
+      expect(screen.getByLabelText('Logs query')).toHaveValue('');
+      expect(screen.getByLabelText('Logs query')).toHaveAttribute(
+        'placeholder',
+        '{service_name="${service}"} | trace_id="${trace_id}"'
+      );
+    });
+
+    it('shows the stored settings', () => {
+      renderEditor({
+        jsonData: {
+          tempoDatasourceUid: 't1',
+          lokiDatasourceUid: 'l1',
+          linkWindowMinutes: 30,
+          serviceTag: 'svc',
+          logsQuery: '{a="b"}',
+        },
+      });
+
+      expect(screen.getByTestId('bugsink-tempo')).toHaveTextContent('t1');
+      expect(screen.getByTestId('bugsink-loki')).toHaveTextContent('l1');
+      expect(screen.getByLabelText('Time window')).toHaveValue(30);
+      expect(screen.getByLabelText('Service tag')).toHaveValue('svc');
+      expect(screen.getByLabelText('Logs query')).toHaveValue('{a="b"}');
+    });
+
+    it('stores the picked Tempo and Loki uids and keeps the other options', () => {
+      const onOptionsChange = renderEditor({ url: 'http://b', jsonData: { browserUrl: 'x' } });
+
+      fireEvent.click(screen.getByRole('button', { name: 'pick tempo' }));
+      fireEvent.click(screen.getByRole('button', { name: 'pick loki' }));
+
+      const next = lastCall(onOptionsChange);
+      expect(next.jsonData).toEqual({
+        browserUrl: 'x',
+        tempoDatasourceUid: 'tempo-uid',
+        lokiDatasourceUid: 'loki-uid',
+      });
+      expect(next.url).toBe('http://b');
+    });
+
+    it('clearing a picker removes its uid', () => {
+      const onOptionsChange = renderEditor({ jsonData: { tempoDatasourceUid: 't1', lokiDatasourceUid: 'l1' } });
+
+      fireEvent.click(screen.getByRole('button', { name: 'clear tempo' }));
+      expect(lastCall(onOptionsChange).jsonData).toEqual({ lokiDatasourceUid: 'l1' });
+
+      fireEvent.click(screen.getByRole('button', { name: 'clear loki' }));
+      expect(lastCall(onOptionsChange).jsonData).toEqual({});
+    });
+
+    it('stores the time window as a number and removes the key when cleared', () => {
+      const onOptionsChange = renderEditor({ jsonData: { browserUrl: 'x' } });
+
+      fireEvent.change(screen.getByLabelText('Time window'), { target: { value: '30' } });
+      expect(lastCall(onOptionsChange).jsonData).toEqual({ browserUrl: 'x', linkWindowMinutes: 30 });
+
+      fireEvent.change(screen.getByLabelText('Time window'), { target: { value: '' } });
+      expect(lastCall(onOptionsChange).jsonData).toEqual({ browserUrl: 'x' });
+      expect(screen.getByLabelText('Time window')).toHaveValue(null);
+    });
+
+    it('stores the logs query and an emptied service tag', () => {
+      const onOptionsChange = renderEditor();
+
+      fireEvent.change(screen.getByLabelText('Logs query'), { target: { value: '{a="b"}' } });
+      expect(lastCall(onOptionsChange).jsonData).toEqual({ logsQuery: '{a="b"}' });
+
+      fireEvent.change(screen.getByLabelText('Service tag'), { target: { value: '' } });
+      expect(lastCall(onOptionsChange).jsonData).toEqual({ logsQuery: '{a="b"}', serviceTag: '' });
+    });
   });
 });

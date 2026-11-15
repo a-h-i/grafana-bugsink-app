@@ -2,15 +2,18 @@
 import {
   CoreApp,
   DataFrame,
+  DataQueryRequest,
+  DataQueryResponse,
   DataSourceInstanceSettings,
   getDefaultTimeRange,
   ScopedVars,
   TimeRange,
 } from '@grafana/data';
 import { DataSourceWithBackend, getTemplateSrv } from '@grafana/runtime';
-import { lastValueFrom } from 'rxjs';
+import { lastValueFrom, map, Observable } from 'rxjs';
 import { eventRows } from './eventRows';
 import { issueRows } from './issueRows';
+import { withLinkRanges } from './links';
 import {
   BugsinkOptions,
   BugsinkQuery,
@@ -40,6 +43,10 @@ export class BugsinkDataSource extends DataSourceWithBackend<BugsinkQuery, Bugsi
 
   getDefaultQuery(): Partial<BugsinkQuery> {
     return DEFAULT_QUERY;
+  }
+
+  query(request: DataQueryRequest<BugsinkQuery>): Observable<DataQueryResponse> {
+    return super.query(request).pipe(map((response) => ({ ...response, data: withLinkRanges(response.data) })));
   }
 
   applyTemplateVariables(query: BugsinkQuery, scopedVars: ScopedVars): BugsinkQuery {

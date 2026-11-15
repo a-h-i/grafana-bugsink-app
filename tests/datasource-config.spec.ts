@@ -83,6 +83,15 @@ test.describe('connecting a Bugsink data source', () => {
     await expect(configPage).toHaveAlert('error', { hasText: 'The browser URL must start with http:// or https://.' });
   });
 
+  test('invalid link time window', async ({ createDataSourceConfigPage, page }) => {
+    const configPage = await saveAndTest(createDataSourceConfigPage, page, BUGSINK_URL, GLOBAL_READ);
+    await page.getByRole('spinbutton', { name: 'Time window' }).fill('2000');
+    await expect(configPage.saveAndTest()).not.toBeOK();
+    await expect(configPage).toHaveAlert('error', {
+      hasText: 'The link time window must be a whole number of minutes from 1 to 1440.',
+    });
+  });
+
   test('provisioned data source', async ({ gotoDataSourceConfigPage, page }) => {
     await gotoDataSourceConfigPage('bugsink');
     await expect(page.getByRole('textbox', { name: 'API token' })).toHaveValue('configured');

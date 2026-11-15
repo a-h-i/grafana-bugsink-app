@@ -51,7 +51,7 @@
 * **Multiple Bugsink instances:** each is one data source instance. The App pages have a data source picker.
 * **Frontend (React with `@grafana/ui`; no Scenes: the App's columns and controls are React cells and components):**
   * App pages: issue list, issue detail, event detail, triage controls.
-  * Config editor: Bugsink base URL, API token, project scope, Tempo and Loki data sources, link templates, triage settings.
+  * Config editor: Bugsink base URL, API token, project scope, Tempo and Loki data sources, link time window, logs query and service tag, triage settings.
   * Query editor: query type (issues, events) and their parameters.
 * **Backend (`grafana-plugin-sdk-go`):**
   * Typed client generated from the pinned OpenAPI schema.
@@ -68,6 +68,7 @@
 * **Token:** a Bugsink API token in `secureJsonData`. Recommended: a global service token with `projects:read`, `issues:read`, `events:read`, plus `issues:triage` and `issues:comment` when triage is enabled.
 * **Project-bound tokens** are supported: `GET /projects/` returns only the token's own project. The config editor discovers the project from it and has no project id field.
 * **Browser URL** (optional, `jsonData.browserUrl`): the address of Bugsink as the browser reaches it, used for links to Bugsink's pages. Empty means the Bugsink URL. It must be `http` or `https` and carry no credentials, query string or fragment.
+* **Link settings** (all in `jsonData`, none secret): `tempoDatasourceUid` and `lokiDatasourceUid` (empty: that link is not offered), `linkWindowMinutes` (a whole number from 1 to 1440; empty means 15), `logsQuery` (empty means the default in §5) and `serviceTag` (empty means the project name; default `service`). A window outside 1 to 1440, a logs query with a substituted variable outside a double-quoted string, or a link key of the wrong type makes the settings invalid: the health check and every query and resource answer with that message.
 * **Health check:** confirms the base URL, the token, and which configured features the token's capabilities allow (for example "triage enabled but token lacks `issues:triage`").
   * No endpoint reports a token's capabilities. `GET /api/0/` returns `auth.scopes`, but it needs `debug-files:upload` and returned `["org:ci"]` for the tokens tried, one with `debug-files:upload` and one with it plus `issues:read` (observed by hand, findings Q4). Each operation needs one (`x-bugsink-required-capability` in the schema), so a client learns a capability only by calling an operation that needs it and reading the refusal.
   * The health check makes one read per capability that the configured features need, and no others (with triage off, nothing is checked for triage). The write capabilities (`issues:triage`, `issues:comment`) cannot be checked without a side effect: the health check reports them as not verified, and the first action that is refused shows Bugsink's 403.
@@ -90,6 +91,7 @@
 * **Time range:** the dashboard time range does not apply to events; an issue, an event id or a trace already scopes the list.
 * **Bounds:** one issue reads at most 4 pages (1000 events); the fan-out reads one page of matching issues (state `all`, last seen first), keeps the first 10 and reads one page (250 events) of each. Each bound reached adds a warning notice, and a failing request fails the query. Results are cached for 15 seconds.
 * **Event list** for one issue (`issue` is required, `q` search): `id`, `event_id`, `timestamp`, `ingested_at`. The list is ordered by `digest_order` (arrival order), newest first by default; there is no sort by event `timestamp`. The UI keeps this order and shows the event `timestamp` in a column; it does not re-sort, because the API pages in arrival order.
+* **Trace ids and links on event frames:** the frame has a `trace_id` field (display `Trace ID`) after `ingested_at` and a `logs_query` field (marked hidden) last. `trace_id` holds the `trace:<id>` term's id for every row of a query with one, and the payload's id for an event id lookup; an issue-only query leaves it empty and carries no links. `trace_id` carries the `Open trace` and `Open logs` links only when every row has a trace id of 32 lowercase hexadecimal characters and at least one target is set. `logs_query` holds the logs query rendered per row, because the rows of one trace can belong to different projects. The links carry the range of the first to the last timestamp plus and minus the window, in the SDK's `timeRange`.
 * **Lookup by SDK event id** (`events/lookup/?project=&event_id=`), for links that carry the Sentry event id.
 * **Search by trace:** Bugsink indexes `contexts.trace.trace_id` as the tag `trace`. `GET /issues/?q=trace:<id>` finds the issues holding events of one trace, with or without `project`; `GET /events/?issue=<id>&q=trace:<id>` finds the events within one issue. Events cannot be searched by trace across issues (`issue` is required). The reverse link, from a Tempo trace to its Bugsink events, therefore goes trace, issue, events. The events query type does this itself: given `trace:<id>` and no issue, it finds the issues and then their events, and returns one frame. The fan-out groups rows by issue, last seen issue first, each issue's events newest first; it does not re-sort across issues.
 * **Event detail:** the full Sentry event payload (`data`). The backend parses it field by field (`GET events/{id}`) and serves a normalised event, so the browser never gets the raw payload; a field of the wrong type is left empty, never an error. The plugin reads the exceptions, stack frames, breadcrumbs, tags, contexts (`trace_id`), environment, release, transaction and message from it. The Sentry event format is a stable public protocol. Reads are not cached.
@@ -108,11 +110,11 @@
 * **Issue detail:** a page at `issues/<id>` with a Back to issues button, an Open in Bugsink button and a Refresh button. Five reads load at the same time (the Event read waits for the Events list when the address names no event): the Event (see Event detail below), the summary (type and message, status, project, transaction, event counts, first and last seen, unmute after and resolved by next release when set), Tags (the 5 values with the highest count per key and the number of other values; needs `events:read`), History (kind, time, author, comment) and Events (the issue's events, 25 per page, newest first). When the summary cannot be read, its message shows alone; otherwise each of the other four shows its own error under its heading. Failed reads raise no Grafana toast.
 * **Event detail:** an Event section on the issue page, between the summary and the Events table.
   * The `event` address parameter holds Bugsink's id of the event on show; without it the newest event of the issue shows. Event ID in the Events table opens an event in the section. An `event` that belongs to another issue shows `This event belongs to another issue.`
-  * Identifying rows, then the exception chain with its stack trace (in-app frames open with source lines, others folded), or the message; Bugsink's stack trace text when no exception has frames.
+  * Identifying rows, then the actions, then the message when the event has one, then the exception chain with its stack trace (in-app frames open with source lines, others folded); Bugsink's stack trace text when no exception has frames. An exception without a type is headed `Unknown exception`.
   * Breadcrumb timeline.
   * Tags and contexts (`environment`, `release`, `trace_id`, user-defined tags).
-  * **Open trace** and **Open logs** buttons (§5), hidden when the event has no `trace_id` or the target data source is not configured. The plugin does not check that the trace exists in Tempo.
-  * An event captured with no active span still carries a `trace_id` (the SDK's own), which Tempo does not have (§5), so for events from the Python SDK this rule rarely applies (the JavaScript SDK was not tested) and a link can lead to a missing trace.
+  * **Open trace** and **Open logs** buttons (§5), hidden when the event has no linkable `trace_id` (32 lowercase hexadecimal characters) or the target data source is not configured, and **Open event in Bugsink**, which opens the event in Bugsink in a new tab. The buttons open Explore in the same tab. The plugin does not check that the trace exists in Tempo.
+  * An event captured with no active span, such as one captured in a new thread, still carries a `trace_id` (the SDK's own), which Tempo does not have (§5), so a link can lead to a missing trace; Tempo's own not-found message shows.
 
 ### E. Triage
 Bugsink has one endpoint per action under `/api/canonical/0/issues/{id}/`:
@@ -134,7 +136,7 @@ Bugsink has one endpoint per action under `/api/canonical/0/issues/{id}/`:
 * The issue's state shown after an action comes from the issue object Bugsink returns.
 
 ### F. Dashboard Integration
-* **Table:** issue rows and event rows, with the same links as the App pages.
+* **Table:** issue rows and event rows, with the same links as the App pages. The `Trace ID` cell of an events table carries `Open trace` and `Open logs` in its cell menu; In Explore, a link followed from the table uses Explore's time range.
 * **Time series and alerting:** open, see §6.
 
 ---
@@ -148,19 +150,23 @@ Verified setup (Python, FastAPI, Sentry SDK 2.75, OpenTelemetry SDK 1.45):
 * Sentry's `OTLPIntegration(setup_otlp_traces_exporter=False)` makes the event's `contexts.trace.trace_id` the OpenTelemetry trace id; the app exports its spans to Tempo itself.
 * In a FastAPI/Starlette app with Sentry's default ASGI integration, the OpenTelemetry ASGI middleware must be the outermost wrapper (`OpenTelemetryMiddleware(app)`). With the FastAPI instrumentor, Sentry captured unhandled errors after the request span had ended and the event carried a trace id Tempo does not have (observed by hand, see phase0_findings.md, Q1; not reproduced by a script).
 * An event raised with no active span still carries a trace id and span id from the SDK's propagation context, and Bugsink tags it `trace`; Tempo has no such trace. The plugin cannot tell such an id from a real one without asking Tempo, so the link is offered and Tempo reports the trace as not found; the documentation explains the case.
-* The integration replaces the global propagator, and an incoming W3C `traceparent` header was ignored in the sample app (observed by hand, see phase0_findings.md, Other findings; not reproduced by a script); `setup_propagator=False` was not tested.
+* The integration's default propagator ignores an incoming W3C `traceparent` header and starts a new trace. With `setup_propagator=False` the span and the event keep the incoming trace id (tested with Sentry SDK 2.75.0), so the documented setup is `OTLPIntegration(setup_otlp_traces_exporter=False, setup_propagator=False)`.
+
+Verified setup (Node.js, Sentry SDK `@sentry/node` 11, OpenTelemetry JS 2): `Sentry.openTelemetryIntegration()` attaches events to the active OpenTelemetry span and leaves propagation and span export to the app's own OpenTelemetry setup; the sample app keeps an incoming `traceparent`. The sample app drops the default Dedupe integration, which compares the first exception, the constant cause, and would drop every later handled event.
 
 ### Link construction
 * Links are Grafana **internal data links** (target data source UID + query) on the event frames. Grafana builds the Explore URL, so the plugin does not hand-write URLs.
 * **Time range:** the event's `timestamp` ± a configurable window (default 15 minutes), not "last hour".
-* **Tempo:** a trace-by-ID query for `trace_id`.
+* **Tempo:** a trace-by-ID query for `trace_id` (`queryType: traceId`), offered only for a trace id of 32 lowercase hexadecimal characters.
 * **Loki:** a configurable LogQL template. Default:
   ```text
   {service_name="${service}"} | trace_id="${trace_id}"
   ```
-  * Template variables: `${trace_id}`, `${service}`, `${project}`, `${environment}`, `${release}`, `${tag:<name>}`.
+  * Template variables: `${trace_id}`, `${service}`, `${project}`, `${environment}`, `${release}`, `${tag:<name>}`. The backend renders the template in one pass, per row; a variable the row does not know renders empty (in a table, `${environment}`, `${release}` and `${tag:…}` are known only for an event id query), and an unknown `${…}` stays as written.
+  * Every variable must sit inside a double-quoted string; a template that does not is refused as an invalid setting. A value is escaped for a double-quoted LogQL string, and `$` and `[` are written as `\u0024` and `\u005b`, so Grafana's template interpolation in Explore finds no variable in an event value. Values are not escaped for a regular expression.
   * `${service}` comes from a configurable source (an event tag, or the Bugsink project name; default: tag `service`, falling back to the project name).
   * The default uses structured metadata (`| trace_id=`): through the OpenTelemetry Collector's OTLP/HTTP export, Loki keeps `trace_id` as structured metadata, not a label, and by default indexes only a fixed set of resource attributes (such as `service_name`) as labels. A line filter (`|= "${trace_id}"`) is a one-line template change for setups that only have the id in the log line.
+* **Range transport:** the backend sends the range in the SDK's `timeRange`; the browser copies it to `internal.range`, the key Grafana reads, and the Event section turns each link into an Explore address with `mapInternalLinkToExplore` (never a hand-written URL).
 * Links belong to events, not issues: `trace_id` is per event, and fetching the latest event for every issue row would cost one call per row.
 
 ---
@@ -183,7 +189,7 @@ Bugsink (2.6.2 and later; verified on 2.6.3) keeps hourly event counters per ins
 
 ## 7. Development & Test Environment
 * **Docker Compose** stack: Bugsink, Grafana (plugin mounted), Tempo, Loki, and an OpenTelemetry Collector.
-* **Sample apps** (one Python, one JavaScript) instrumented with a Sentry SDK pointed at Bugsink and OpenTelemetry pointed at the collector, sharing trace context. They produce errors on demand.
+* **Sample apps** (one Python, one JavaScript, a Node server on port 8820) instrumented with a Sentry SDK pointed at Bugsink and OpenTelemetry pointed at the collector, sharing trace context. They produce errors on demand.
 * **Ingestion throttle:** Bugsink throttles ingestion at about 1000 events per 5 minutes and answers 429 (observed by hand; the limits were not measured), so tests that produce events keep to a small budget per run.
 * **Tests:** Go unit tests for the client and frame conversion; frontend unit tests; end-to-end tests with `@grafana/plugin-e2e` against the Compose stack, run in CI.
 
@@ -230,9 +236,17 @@ Decided on 2026-11-15:
 | When the issue summary cannot be read | Its message shows alone and the other sections are not shown | §4.D |
 | How the App pages are built and get their data | Plain React with `@grafana/ui`; the issue list runs the data source's issues query | §3, §4.D |
 | What the Event section shows when no exception has frames | Bugsink's own stack trace text as plain text, possibly with local variables; the structured view never shows locals | §4.C, §4.D |
+| Where the Python setup stands on `traceparent` | The documented setup is `setup_propagator=False`, which keeps an incoming `traceparent`; the sample app uses it | §5 |
+| Trace ids on event frames | Only where the query names them: the `trace:<id>` term or an event id lookup; an issue-only query has none and no links | §4.C |
+| Which trace ids get links | Only 32 lowercase hexadecimal characters, in the resource and the frames, so no dead link and no raw value in a Tempo query | §4.C, §5 |
+| How the logs query is rendered | In Go, per row, in one pass, into a `logs_query` field marked hidden; variables only inside double quotes; `$` and `[` in values written as `\u` escapes | §5 |
+| Where the link range comes from | The backend; the browser copies `timeRange` to `range`; Explore applies its own range | §5 |
+| Where Open trace and Open logs open | Explore in the same tab; Back from Explore can need more than one press: Explore adds its own history entries | §4.D |
+| The JavaScript sample app | A Node server on port 8820 with `@sentry/node` and `openTelemetryIntegration()`; its transitive `sentry@0.49.0` (FSL-1.1-Apache-2.0) is accepted for the dev stack because the image is not published and the licence check covers what the plugin ships | §7 |
+| The Message and an exception without a type | The message shows above the exception whenever it is not empty; an untyped exception is headed `Unknown exception` | §4.D |
 | Where the event payload is parsed | In the backend, bounded, one normalised event for the browser and for M6 | §4.C |
 | An `event` address that names another issue's event | An error under Event, not the event | §4.D |
 | Code generated from the PolyForm Shield schema, compiled into the GPL plugin | Shipped without asking for permission; the owner accepted the risk on 2026-11-15. The generated client is confined to one package (`pkg/bugsink/internal/gen`), so a hand-written client can replace it if Bugsink B.V. objects | §9 |
 
 Still open:
-* Whether the documented Python setup keeps the OTLP integration's propagator or sets `setup_propagator=False`. M6 tests both and documents the one that honours an incoming `traceparent` (§5).
+* None.

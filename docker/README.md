@@ -1,7 +1,7 @@
 # Development stack
 
 A local Docker Compose stack for developing the plugin: Bugsink 2.6.3 (with PostgreSQL), Grafana, Tempo,
-Loki, an OpenTelemetry Collector and a Python sample app that reports errors to Bugsink and spans and logs to
+Loki, an OpenTelemetry Collector and two sample apps, Python and JavaScript, that report errors to Bugsink and spans and logs to
 the collector under one trace id. Findings from building it are in
 [`design/phase0_findings.md`](../design/phase0_findings.md).
 
@@ -37,7 +37,8 @@ After a rebuild of the backend, run `docker compose restart grafana`.
 | :--- | :--- | :--- |
 | Grafana | <http://localhost:3300> | anonymous, role Admin, no login form |
 | Bugsink | <http://localhost:8800> | API at `/api/canonical/0/`, schema at `/api/canonical/0/schema/` |
-| Sample app | <http://localhost:8810> | see below |
+| Python sample app | <http://localhost:8810> | see below |
+| JavaScript sample app | <http://localhost:8820> | see below |
 
 Ports are bound to `127.0.0.1` only. PostgreSQL, Tempo, Loki and the collector publish nothing; reach Tempo and
 Loki through Grafana (`/api/datasources/proxy/uid/tempo/...`, `/api/datasources/proxy/uid/loki/...`).
@@ -49,10 +50,11 @@ To move a port, copy `.env.example` to `.env` (git-ignored) and edit it, then `d
 BUGSINK_PORT=8800
 GRAFANA_PORT=3300
 SAMPLE_PYTHON_PORT=8810
+SAMPLE_JS_PORT=8820
 BUGSINK_VERSION=2.6.3
 ```
 
-The host scripts do not read `.env`; when a port is moved, export `BUGSINK_URL`, `GRAFANA_URL` and `SAMPLE_PYTHON_URL` so they follow it.
+The host scripts do not read `.env`; when a port is moved, export `BUGSINK_URL`, `GRAFANA_URL` and `SAMPLE_PYTHON_URL`, `SAMPLE_JS_URL` so they follow it.
 
 ## Seeded values (public, development only)
 
@@ -79,7 +81,9 @@ Anonymous access with role Admin; no login. The data sources `Tempo` (uid `tempo
 `docker/grafana/provisioning/datasources/datasources.yaml`. `Bugsink` points at the Compose Bugsink and uses the
 seeded `GLOBAL_READ` token, a public development-only value, and `Browser URL` `http://localhost:8800`, so
 issue links open the Bugsink on the host. `Bugsink project-bound` (uid `bugsink-project`) is the same instance with the
-`PROJECT_READ` token, which sees only `sample-python`. The plugin app is enabled by
+`PROJECT_READ` token, which sees only `sample-python`.
+
+`Bugsink` has the link settings `tempoDatasourceUid` `tempo` and `lokiDatasourceUid` `loki`, so its events offer `Open trace` and `Open logs`. `Bugsink project-bound` has no targets, so it shows no buttons and no links. The plugin app is enabled by
 `docker/grafana/provisioning/plugins/apps.yaml`; its issue list page opens at
 <http://localhost:3300/a/ahmedismail-bugsink-app>.
 
@@ -97,7 +101,9 @@ issue links open the Bugsink on the host. `Bugsink project-bound` (uid `bugsink-
 
 After changing a provisioning file, run `docker compose restart grafana`.
 
-## Sample app
+## Sample apps
+
+### Python
 
 The Python app (`sample-apps/python`, FastAPI) sends errors to Bugsink with the Sentry SDK and spans and logs to
 the collector with OpenTelemetry, sharing the trace context.
@@ -107,7 +113,7 @@ the collector with OpenTelemetry, sharing the trace context.
 | `GET /healthz` | `{"status": "ok"}` |
 | `GET /handled[?variant=<v>]` | captures a handled error; returns `{trace_id, event_id}` |
 | `GET /chained[?variant=<v>]` | adds the breadcrumb `parsing the order` and captures a `RuntimeError` raised from a `JSONDecodeError` (two chained exceptions with frames); returns `{trace_id, event_id}` |
-| `GET /message[?variant=<v>]` | captures a warning message with the stack trace of the call (`attach_stacktrace`) and no exception; the plugin shows Bugsink's stack trace text for it; returns `{event_id}` |
+| `GET /message[?variant=<v>]` | captures a warning message with the stack trace of the call (`attach_stacktrace`) and no exception, outside any span, so its trace id is not in Tempo; the plugin shows Bugsink's stack trace text for it; returns `{event_id}` |
 | `GET /error[?variant=<v>]` | unhandled error, HTTP 500; captured by Sentry under the request's trace id |
 | `POST /no-trace` | captures an error outside any span; returns `{event_id}`; its trace id is not in Tempo |
 
@@ -121,13 +127,25 @@ curl -s 'http://localhost:8810/error?variant=3'
 curl -s -X POST http://localhost:8810/no-trace
 ```
 
+### JavaScript
+
+The JavaScript app (`sample-apps/javascript`) is a Node server on port 8820. It sends errors to project `sample-js` with `@sentry/node` and `Sentry.openTelemetryIntegration()`, and spans and logs to the collector with OpenTelemetry. Its Sentry setup drops the default Dedupe integration, so repeated demo errors are all reported. Its dependency tree includes `sentry@0.49.0` (FSL-1.1-Apache-2.0) through `@sentry/node`; the image is for local development and is not published.
+
+| Endpoint | Effect |
+| :--- | :--- |
+| `GET /healthz` | `{"status": "ok"}` |
+| `GET /handled[?variant=<v>]` | captures an `Error` with a `cause` inside a span, honouring an incoming `traceparent`; returns `{trace_id, event_id}` |
+
+```sh
+curl -s 'http://localhost:8820/handled?variant=1'
+```
+
 ## Scripts
 
 Both need only `uv` and Python 3 on the host (standard library otherwise), and the stack running.
 
-* `uv run scripts/verify_stack.py` calls `/handled` and `/no-trace` and prints six lines, `ok` or `FAIL`: the sample
-  app's trace id, the Bugsink event with that id, the Bugsink search `trace:<id>`, the trace in Tempo, the log lines in
-  Loki, and the no-trace event (in Bugsink, absent from Tempo). Exit 0 only if all six pass.
+* `uv run scripts/verify_stack.py` calls the sample apps and prints eleven lines, `ok` or `FAIL`. For the Python app: its trace id, the Bugsink event with that id, the Bugsink search `trace:<id>`, the trace in Tempo, the log lines in
+  Loki, the no-trace event (in Bugsink, absent from Tempo) and an incoming `traceparent` kept as the trace id. For the JavaScript app: an incoming `traceparent` kept as its trace id, the Bugsink event in project `sample-js`, the trace in Tempo and the log lines in Loki. Exit 0 only if all eleven pass.
 * `uv run scripts/probe_api.py [--out report.md]` sends events (264 on an empty stack, 10 afterwards), calls
   the Bugsink API with all four tokens and prints a Markdown report in eight sections: token matrix, refusals,
   issues without a project, events by trace, paging and order, event data, event counts, triage response. It mutes and

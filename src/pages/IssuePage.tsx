@@ -122,7 +122,9 @@ export function IssuePage(): React.JSX.Element {
     event.value !== undefined &&
     issue !== undefined &&
     ![issueId, issue.id, issue.friendlyId].some((id) => id.toLowerCase() === event.value!.issueId.toLowerCase());
-  const eventState = foreignEvent ? { pending: false, error: 'This event belongs to another issue.' } : event;
+  const eventState = foreignEvent
+    ? { pending: false, error: 'This event belongs to another issue.' }
+    : { ...event, pending: event.pending || (event.value !== undefined && issue === undefined) };
   const pending = summary.pending || tags.pending || history.pending || events.pending || event.pending;
 
   const actions = [

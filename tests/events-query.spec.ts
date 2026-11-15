@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import { expect, test } from '@grafana/plugin-e2e';
-import { TRACE_MARKER } from './seeded';
+import { EVENT_MARKER } from './seeded';
 import { readReported } from './reported';
 
 function dashed(hex: string) {
@@ -19,7 +19,7 @@ test.describe('events', () => {
     const events = dashboardPage.getPanelByTitle('Events in this trace');
     await expect(async () => {
       await dashboardPage.refreshDashboard();
-      await expect(issues.data).toContainText([TRACE_MARKER]);
+      await expect(issues.data).toContainText([EVENT_MARKER]);
       await expect(events.data).toContainText([dashed(eventId)]);
     }).toPass();
     await expect(events.data).toContainText([/SAMPLE-PYTHON-\d+/]);

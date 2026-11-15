@@ -27,6 +27,7 @@ function event(overrides: Partial<EventDetail> = {}): EventDetail {
     stacktraceMd: null,
     notices: [],
     bugsinkUrl: 'http://bugsink/x',
+    links: [],
     ...overrides,
   };
 }
@@ -58,6 +59,8 @@ const HOSTILE = '<img src=x onerror=alert(1)><script>alert(1)</script>[x](javasc
 function renderView(e: EventDetail) {
   return render(<EventDetailView event={e} timeZone="utc" />);
 }
+
+const anchorHrefs = (container: HTMLElement) => [...container.querySelectorAll('a')].map((a) => a.getAttribute('href'));
 
 describe('EventDetailView', () => {
   it('lists the identifying rows', () => {
@@ -107,6 +110,60 @@ describe('EventDetailView', () => {
     expect(screen.getByText('two')).toBeInTheDocument();
   });
 
+  it('gives identical notices distinct keys', () => {
+    const spy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      renderView(event({ notices: ['same notice', 'same notice'] }));
+
+      const keyWarnings = spy.mock.calls.filter((call) => call.some((arg) => String(arg).includes('same key')));
+      expect(keyWarnings).toHaveLength(0);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  describe('links', () => {
+    const link = (title: string, datasourceUid: string) => ({
+      title,
+      internal: { datasourceUid, query: { refId: 'A' }, timeRange: { from: '1000', to: '2000' } },
+    });
+
+    it('opens the trace and the logs in Explore in the same tab', () => {
+      renderView(event({ links: [link('Open trace', 'tempo'), link('Open logs', 'loki')] }));
+
+      for (const name of ['Open trace', 'Open logs']) {
+        const anchor = screen.getByRole('link', { name });
+        expect(anchor.getAttribute('href')).toContain('/explore?left=');
+        expect(anchor).not.toHaveAttribute('target');
+      }
+    });
+
+    it('shows no Explore button without links', () => {
+      renderView(event({ links: [] }));
+
+      expect(screen.queryByRole('link', { name: 'Open trace' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('link', { name: 'Open logs' })).not.toBeInTheDocument();
+    });
+
+    it('opens the event in Bugsink in a new tab', () => {
+      renderView(event({ bugsinkUrl: 'http://bugsink/issue/1/event/2/' }));
+
+      const anchor = screen.getByRole('link', { name: 'Open event in Bugsink' });
+      expect(anchor).toHaveAttribute('href', 'http://bugsink/issue/1/event/2/');
+      expect(anchor).toHaveAttribute('target', '_blank');
+      expect(anchor).toHaveAttribute('rel', 'noreferrer');
+    });
+  });
+
+  it('shows the message before the exception', () => {
+    renderView(event({ message: 'order 42 failed', exceptions: [{ ...exception, frames: [frame] }] }));
+
+    const message = screen.getByRole('heading', { level: 3, name: 'Message' });
+    const exceptions = screen.getByRole('heading', { level: 3, name: 'Exception' });
+    expect(within(message.parentElement!).getByText('order 42 failed')).toBeInTheDocument();
+    expect(message.compareDocumentPosition(exceptions) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it('shows the exception chain and no stack trace section when an exception has frames', () => {
     renderView(event({ exceptions: [{ ...exception, frames: [frame] }], stacktraceMd: 'ignored' }));
 
@@ -129,9 +186,7 @@ describe('EventDetailView', () => {
   });
 
   it('shows the exception and Bugsink text when no exception has frames', () => {
-    const { container } = renderView(
-      event({ exceptions: [exception], message: 'hidden', stacktraceMd: '# boom\n  at main' })
-    );
+    const { container } = renderView(event({ exceptions: [exception], stacktraceMd: '# boom\n  at main' }));
 
     expect(screen.getByRole('heading', { level: 3, name: 'Exception' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 3, name: 'Stack trace' })).toBeInTheDocument();
@@ -187,18 +242,21 @@ describe('EventDetailView', () => {
     };
     const withException = renderView(
       event({
+        message: HOSTILE,
         exceptions: [{ ...exception, value: HOSTILE, frames: [frame] }],
         breadcrumbs: [{ timestamp: null, type: 'default', category: 'app', level: 'info', message: HOSTILE, data: [] }],
         tags: [{ key: 'k', value: HOSTILE }],
         contexts: [{ name: 'c', fields: [{ key: 'f', value: HOSTILE }] }],
       })
     );
-    expect(screen.getAllByText(HOSTILE, { exact: false }).length).toBeGreaterThanOrEqual(5);
-    expect(withException.container.querySelector('img, script, iframe, a')).toBeNull();
+    expect(screen.getAllByText(HOSTILE, { exact: false }).length).toBeGreaterThanOrEqual(6);
+    expect(anchorHrefs(withException.container)).toEqual(['http://bugsink/x']);
+    expect(withException.container.querySelector('img, script, iframe')).toBeNull();
     withException.unmount();
 
     const fallback = renderView(event({ stacktraceMd: HOSTILE }));
     expect(fallback.container.querySelector('pre')?.textContent).toBe(HOSTILE);
-    expect(fallback.container.querySelector('img, script, iframe, a')).toBeNull();
+    expect(anchorHrefs(fallback.container)).toEqual(['http://bugsink/x']);
+    expect(fallback.container.querySelector('img, script, iframe')).toBeNull();
   });
 });

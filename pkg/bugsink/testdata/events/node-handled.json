@@ -1,0 +1,518 @@
+{
+ "id": "2dd1be35-0bbb-4c06-ada3-c6e17e3202cf",
+ "ingested_at": "2026-11-15T09:34:37.770436Z",
+ "digested_at": "2026-11-15T09:34:37.785134Z",
+ "issue": "2a22851a-28ed-48bc-85eb-b97622e74c4c",
+ "grouping": 279,
+ "event_id": "3c7b2815-99c0-4718-879c-cdc1ea7aca5f",
+ "project": 2,
+ "timestamp": "2026-11-15T09:34:37.768000Z",
+ "digest_order": 6,
+ "data": {
+  "exception": {
+   "values": [
+    {
+     "type": "TypeError",
+     "value": "order total is not a number",
+     "stacktrace": {
+      "frames": [
+       {
+        "filename": "/app/node_modules/@sentry/core/build/esm/integrations/http/server-subscription.js",
+        "module": "@sentry.core.build.esm.integrations.http:server-subscription",
+        "function": "?",
+        "lineno": 113,
+        "colno": 37,
+        "in_app": false,
+        "pre_context": [
+         "            });",
+         "            const wrap = options.wrapServerEmitRequest;",
+         "            let emitResult = false;",
+         "            if (wrap) {",
+         "              wrap(request, response, normalizedRequest, () => {"
+        ],
+        "context_line": "                emitResult = target.apply(thisArg, args);",
+        "post_context": [
+         "              });",
+         "            } else {",
+         "              emitResult = target.apply(thisArg, args);",
+         "            }",
+         "            return emitResult;"
+        ]
+       },
+       {
+        "filename": "node:events",
+        "module": "node:events",
+        "function": "Server.emit",
+        "lineno": 519,
+        "colno": 28,
+        "in_app": false
+       },
+       {
+        "filename": "/app/app.mjs",
+        "module": "app",
+        "function": "Server.?",
+        "lineno": 76,
+        "colno": 16,
+        "in_app": true,
+        "pre_context": [
+         "    }",
+         "  });",
+         "}",
+         "",
+         "const server = createServer((req, res) => {"
+        ],
+        "context_line": "  const body = route(new URL(req.url, 'http://localhost'), req.headers);",
+        "post_context": [
+         "  res.writeHead(body ? 200 : 404, { 'content-type': 'application/json' });",
+         "  res.end(JSON.stringify(body ?? { status: 'not found' }));",
+         "});",
+         "server.listen(8000);",
+         ""
+        ]
+       },
+       {
+        "filename": "/app/app.mjs",
+        "module": "app",
+        "function": "route",
+        "lineno": 66,
+        "colno": 17,
+        "in_app": true,
+        "pre_context": [
+         "  }",
+         "  if (url.pathname !== '/handled') {",
+         "    return null;",
+         "  }",
+         "  const parent = propagation.extract(ROOT_CONTEXT, headers);"
+        ],
+        "context_line": "  return tracer.startActiveSpan('GET /handled', { kind: SpanKind.SERVER }, parent, (span) => {",
+        "post_context": [
+         "    try {",
+         "      return handled(url.searchParams.get('variant'));",
+         "    } finally {",
+         "      span.end();",
+         "    }"
+        ]
+       },
+       {
+        "filename": "/app/node_modules/@opentelemetry/sdk-trace/build/src/Tracer.js",
+        "module": "@opentelemetry.sdk-trace.build.src:Tracer",
+        "function": "Tracer.startActiveSpan",
+        "lineno": 132,
+        "colno": 32,
+        "in_app": false,
+        "pre_context": [
+         "            fn = arg4;",
+         "        }",
+         "        const parentContext = ctx ?? api.context.active();",
+         "        const span = this.startSpan(name, opts, parentContext);",
+         "        const contextWithSpanSet = api.trace.setSpan(parentContext, span);"
+        ],
+        "context_line": "        return api.context.with(contextWithSpanSet, fn, undefined, span);",
+        "post_context": [
+         "    }",
+         "    [inspect_1.inspectCustom](depth, options, inspect) {",
+         "        const payload = {",
+         "            instrumentationScope: this.instrumentationScope,",
+         "            resource: { attributes: (0, inspect_1.settledResourceAttributes)(this._resource) },"
+        ]
+       },
+       {
+        "filename": "/app/node_modules/@opentelemetry/api/build/src/api/context.js",
+        "module": "@opentelemetry.api.build.src.api:context",
+        "function": "ContextAPI.with",
+        "lineno": 51,
+        "colno": 46,
+        "in_app": false,
+        "pre_context": [
+         "     * @param fn function to execute in a context",
+         "     * @param thisArg optional receiver to be used for calling fn",
+         "     * @param args optional arguments forwarded to fn",
+         "     */",
+         "    with(context, fn, thisArg, ...args) {"
+        ],
+        "context_line": "        return this._getContextManager().with(context, fn, thisArg, ...args);",
+        "post_context": [
+         "    }",
+         "    /**",
+         "     * Bind a context to a target function or event emitter",
+         "     *",
+         "     * @param context context to bind to the event emitter or function. Defaults to the currently active context"
+        ]
+       },
+       {
+        "filename": "/app/node_modules/@opentelemetry/context-async-hooks/build/src/AsyncLocalStorageContextManager.js",
+        "module": "@opentelemetry.context-async-hooks.build.src:AsyncLocalStorageContextManager",
+        "function": "AsyncLocalStorageContextManager.with",
+        "lineno": 45,
+        "colno": 40,
+        "in_app": false,
+        "pre_context": [
+         "    active() {",
+         "        return this._asyncLocalStorage.getStore() ?? api_1.ROOT_CONTEXT;",
+         "    }",
+         "    with(context, fn, thisArg, ...args) {",
+         "        const cb = thisArg == null ? fn : fn.bind(thisArg);"
+        ],
+        "context_line": "        return this._asyncLocalStorage.run(context, cb, ...args);",
+        "post_context": [
+         "    }",
+         "    enable() {",
+         "        return this;",
+         "    }",
+         "    disable() {"
+        ]
+       },
+       {
+        "filename": "node:internal/async_local_storage/async_hooks",
+        "module": "async_hooks",
+        "function": "AsyncLocalStorage.run",
+        "lineno": 91,
+        "colno": 14,
+        "in_app": false
+       },
+       {
+        "filename": "/app/app.mjs",
+        "module": "app",
+        "function": "?",
+        "lineno": 68,
+        "colno": 14,
+        "in_app": true,
+        "pre_context": [
+         "    return null;",
+         "  }",
+         "  const parent = propagation.extract(ROOT_CONTEXT, headers);",
+         "  return tracer.startActiveSpan('GET /handled', { kind: SpanKind.SERVER }, parent, (span) => {",
+         "    try {"
+        ],
+        "context_line": "      return handled(url.searchParams.get('variant'));",
+        "post_context": [
+         "    } finally {",
+         "      span.end();",
+         "    }",
+         "  });",
+         "}"
+        ]
+       },
+       {
+        "filename": "/app/app.mjs",
+        "module": "app",
+        "function": "handled",
+        "lineno": 53,
+        "colno": 17,
+        "in_app": true,
+        "pre_context": [
+         "",
+         "function handled(variant) {",
+         "  const traceId = trace.getActiveSpan().spanContext().traceId;",
+         "  logger.emit({ severityText: 'INFO', body: 'handling a request that fails with a handled error' });",
+         "  Sentry.addBreadcrumb({ category: 'app', message: 'about to fail', level: 'info' });"
+        ],
+        "context_line": "  const cause = new TypeError('order total is not a number');",
+        "post_context": [
+         "  const eventId = Sentry.captureException(new Error(message('handled failure', variant), { cause }));",
+         "  return { trace_id: traceId, event_id: eventId };",
+         "}",
+         "",
+         "function route(url, headers) {"
+        ]
+       }
+      ]
+     },
+     "mechanism": {
+      "handled": true,
+      "type": "chained",
+      "source": "cause",
+      "exception_id": 1,
+      "parent_id": 0
+     }
+    },
+    {
+     "type": "Error",
+     "value": "handled failure (variant vm6-plan)",
+     "stacktrace": {
+      "frames": [
+       {
+        "filename": "/app/node_modules/@sentry/core/build/esm/integrations/http/server-subscription.js",
+        "module": "@sentry.core.build.esm.integrations.http:server-subscription",
+        "function": "?",
+        "lineno": 113,
+        "colno": 37,
+        "in_app": false,
+        "pre_context": [
+         "            });",
+         "            const wrap = options.wrapServerEmitRequest;",
+         "            let emitResult = false;",
+         "            if (wrap) {",
+         "              wrap(request, response, normalizedRequest, () => {"
+        ],
+        "context_line": "                emitResult = target.apply(thisArg, args);",
+        "post_context": [
+         "              });",
+         "            } else {",
+         "              emitResult = target.apply(thisArg, args);",
+         "            }",
+         "            return emitResult;"
+        ]
+       },
+       {
+        "filename": "node:events",
+        "module": "node:events",
+        "function": "Server.emit",
+        "lineno": 519,
+        "colno": 28,
+        "in_app": false
+       },
+       {
+        "filename": "/app/app.mjs",
+        "module": "app",
+        "function": "Server.?",
+        "lineno": 76,
+        "colno": 16,
+        "in_app": true,
+        "pre_context": [
+         "    }",
+         "  });",
+         "}",
+         "",
+         "const server = createServer((req, res) => {"
+        ],
+        "context_line": "  const body = route(new URL(req.url, 'http://localhost'), req.headers);",
+        "post_context": [
+         "  res.writeHead(body ? 200 : 404, { 'content-type': 'application/json' });",
+         "  res.end(JSON.stringify(body ?? { status: 'not found' }));",
+         "});",
+         "server.listen(8000);",
+         ""
+        ]
+       },
+       {
+        "filename": "/app/app.mjs",
+        "module": "app",
+        "function": "route",
+        "lineno": 66,
+        "colno": 17,
+        "in_app": true,
+        "pre_context": [
+         "  }",
+         "  if (url.pathname !== '/handled') {",
+         "    return null;",
+         "  }",
+         "  const parent = propagation.extract(ROOT_CONTEXT, headers);"
+        ],
+        "context_line": "  return tracer.startActiveSpan('GET /handled', { kind: SpanKind.SERVER }, parent, (span) => {",
+        "post_context": [
+         "    try {",
+         "      return handled(url.searchParams.get('variant'));",
+         "    } finally {",
+         "      span.end();",
+         "    }"
+        ]
+       },
+       {
+        "filename": "/app/node_modules/@opentelemetry/sdk-trace/build/src/Tracer.js",
+        "module": "@opentelemetry.sdk-trace.build.src:Tracer",
+        "function": "Tracer.startActiveSpan",
+        "lineno": 132,
+        "colno": 32,
+        "in_app": false,
+        "pre_context": [
+         "            fn = arg4;",
+         "        }",
+         "        const parentContext = ctx ?? api.context.active();",
+         "        const span = this.startSpan(name, opts, parentContext);",
+         "        const contextWithSpanSet = api.trace.setSpan(parentContext, span);"
+        ],
+        "context_line": "        return api.context.with(contextWithSpanSet, fn, undefined, span);",
+        "post_context": [
+         "    }",
+         "    [inspect_1.inspectCustom](depth, options, inspect) {",
+         "        const payload = {",
+         "            instrumentationScope: this.instrumentationScope,",
+         "            resource: { attributes: (0, inspect_1.settledResourceAttributes)(this._resource) },"
+        ]
+       },
+       {
+        "filename": "/app/node_modules/@opentelemetry/api/build/src/api/context.js",
+        "module": "@opentelemetry.api.build.src.api:context",
+        "function": "ContextAPI.with",
+        "lineno": 51,
+        "colno": 46,
+        "in_app": false,
+        "pre_context": [
+         "     * @param fn function to execute in a context",
+         "     * @param thisArg optional receiver to be used for calling fn",
+         "     * @param args optional arguments forwarded to fn",
+         "     */",
+         "    with(context, fn, thisArg, ...args) {"
+        ],
+        "context_line": "        return this._getContextManager().with(context, fn, thisArg, ...args);",
+        "post_context": [
+         "    }",
+         "    /**",
+         "     * Bind a context to a target function or event emitter",
+         "     *",
+         "     * @param context context to bind to the event emitter or function. Defaults to the currently active context"
+        ]
+       },
+       {
+        "filename": "/app/node_modules/@opentelemetry/context-async-hooks/build/src/AsyncLocalStorageContextManager.js",
+        "module": "@opentelemetry.context-async-hooks.build.src:AsyncLocalStorageContextManager",
+        "function": "AsyncLocalStorageContextManager.with",
+        "lineno": 45,
+        "colno": 40,
+        "in_app": false,
+        "pre_context": [
+         "    active() {",
+         "        return this._asyncLocalStorage.getStore() ?? api_1.ROOT_CONTEXT;",
+         "    }",
+         "    with(context, fn, thisArg, ...args) {",
+         "        const cb = thisArg == null ? fn : fn.bind(thisArg);"
+        ],
+        "context_line": "        return this._asyncLocalStorage.run(context, cb, ...args);",
+        "post_context": [
+         "    }",
+         "    enable() {",
+         "        return this;",
+         "    }",
+         "    disable() {"
+        ]
+       },
+       {
+        "filename": "node:internal/async_local_storage/async_hooks",
+        "module": "async_hooks",
+        "function": "AsyncLocalStorage.run",
+        "lineno": 91,
+        "colno": 14,
+        "in_app": false
+       },
+       {
+        "filename": "/app/app.mjs",
+        "module": "app",
+        "function": "?",
+        "lineno": 68,
+        "colno": 14,
+        "in_app": true,
+        "pre_context": [
+         "    return null;",
+         "  }",
+         "  const parent = propagation.extract(ROOT_CONTEXT, headers);",
+         "  return tracer.startActiveSpan('GET /handled', { kind: SpanKind.SERVER }, parent, (span) => {",
+         "    try {"
+        ],
+        "context_line": "      return handled(url.searchParams.get('variant'));",
+        "post_context": [
+         "    } finally {",
+         "      span.end();",
+         "    }",
+         "  });",
+         "}"
+        ]
+       },
+       {
+        "filename": "/app/app.mjs",
+        "module": "app",
+        "function": "handled",
+        "lineno": 54,
+        "colno": 43,
+        "in_app": true,
+        "pre_context": [
+         "function handled(variant) {",
+         "  const traceId = trace.getActiveSpan().spanContext().traceId;",
+         "  logger.emit({ severityText: 'INFO', body: 'handling a request that fails with a handled error' });",
+         "  Sentry.addBreadcrumb({ category: 'app', message: 'about to fail', level: 'info' });",
+         "  const cause = new TypeError('order total is not a number');"
+        ],
+        "context_line": "  const eventId = Sentry.captureException(new Error(message('handled failure', variant), { cause }));",
+        "post_context": [
+         "  return { trace_id: traceId, event_id: eventId };",
+         "}",
+         "",
+         "function route(url, headers) {",
+         "  if (url.pathname === '/healthz') {"
+        ]
+       }
+      ]
+     },
+     "mechanism": {
+      "handled": true,
+      "type": "generic",
+      "exception_id": 0
+     }
+    }
+   ]
+  },
+  "event_id": "3c7b281599c04718879ccdc1ea7aca5f",
+  "level": "error",
+  "platform": "node",
+  "contexts": {
+   "trace": {
+    "trace_id": "eef06c2ff212b2860e310a25d5f81853",
+    "span_id": "a6c1a3315ffccf0e"
+   },
+   "runtime": {
+    "name": "node",
+    "version": "v22.23.5"
+   },
+   "app": {
+    "app_start_time": "2026-11-15T09:33:54.100Z",
+    "app_memory": 113569792,
+    "free_memory": 106858790912
+   }
+  },
+  "timestamp": 1794735277.768,
+  "environment": "development",
+  "release": "sample-js@0.1.0",
+  "sdk": {
+   "integrations": [
+    "EventFilters",
+    "FunctionToString",
+    "LinkedErrors",
+    "RequestData",
+    "NodeSystemError",
+    "ConversationId",
+    "Console",
+    "Http",
+    "NodeFetch",
+    "OnUncaughtException",
+    "OnUnhandledRejection",
+    "ContextLines",
+    "LocalVariablesAsync",
+    "AwsLambdaWeb",
+    "Context",
+    "ChildProcess",
+    "WorkerThreads",
+    "ProcessSession",
+    "Modules",
+    "Express",
+    "Fastify",
+    "Hapi",
+    "Hono",
+    "Koa",
+    "Nitro",
+    "OpenTelemetry",
+    "SpanStreaming"
+   ],
+   "name": "sentry.javascript.node",
+   "version": "11.12.0",
+   "packages": [
+    {
+     "name": "npm:@sentry/node",
+     "version": "11.12.0"
+    }
+   ]
+  },
+  "tags": {
+   "service": "sample-js"
+  },
+  "transaction": "GET /handled",
+  "breadcrumbs": [
+   {
+    "timestamp": 1794735277.767,
+    "category": "app",
+    "message": "about to fail",
+    "level": "info"
+   }
+  ]
+ },
+ "stacktrace_md": "# Error\nhandled failure (variant vm6-plan)\n\n### /app/app.mjs:54 in `handled` [in-app]\n  49 | function handled(variant) {\n  50 |   const traceId = trace.getActiveSpan().spanContext().traceId;\n  51 |   logger.emit({ severityText: 'INFO', body: 'handling a request that fails with a handled error' });\n  52 |   Sentry.addBreadcrumb({ category: 'app', message: 'about to fail', level: 'info' });\n  53 |   const cause = new TypeError('order total is not a number');\n▶ 54 |   const eventId = Sentry.captureException(new Error(message('handled failure', variant), { cause }));\n  55 |   return { trace_id: traceId, event_id: eventId };\n  56 | }\n  57 |\n  58 | function route(url, headers) {\n  59 |   if (url.pathname === '/healthz') {\n\n### /app/app.mjs:68 in `?` [in-app]\n  63 |     return null;\n  64 |   }\n  65 |   const parent = propagation.extract(ROOT_CONTEXT, headers);\n  66 |   return tracer.startActiveSpan('GET /handled', { kind: SpanKind.SERVER }, parent, (span) => {\n  67 |     try {\n▶ 68 |       return handled(url.searchParams.get('variant'));\n  69 |     } finally {\n  70 |       span.end();\n  71 |     }\n  72 |   });\n  73 | }\n\n### node:internal/async_local_storage/async_hooks:91 in `AsyncLocalStorage.run` [external]\n_no source context available_\n\n### /app/node_modules/@opentelemetry/context-async-hooks/build/src/AsyncLocalStorageContextManager.js:45 in `AsyncLocalStorageContextManager.with` [external]\n  40 |     active() {\n  41 |         return this._asyncLocalStorage.getStore() ?? api_1.ROOT_CONTEXT;\n  42 |     }\n  43 |     with(context, fn, thisArg, ...args) {\n  44 |         const cb = thisArg == null ? fn : fn.bind(thisArg);\n▶ 45 |         return this._asyncLocalStorage.run(context, cb, ...args);\n  46 |     }\n  47 |     enable() {\n  48 |         return this;\n  49 |     }\n  50 |     disable() {\n\n### /app/node_modules/@opentelemetry/api/build/src/api/context.js:51 in `ContextAPI.with` [external]\n  46 |      * @param fn function to execute in a context\n  47 |      * @param thisArg optional receiver to be used for calling fn\n  48 |      * @param args optional arguments forwarded to fn\n  49 |      */\n  50 |     with(context, fn, thisArg, ...args) {\n▶ 51 |         return this._getContextManager().with(context, fn, thisArg, ...args);\n  52 |     }\n  53 |     /**\n  54 |      * Bind a context to a target function or event emitter\n  55 |      *\n  56 |      * @param context context to bind to the event emitter or function. Defaults to the currently active context\n\n### /app/node_modules/@opentelemetry/sdk-trace/build/src/Tracer.js:132 in `Tracer.startActiveSpan` [external]\n  127 |             fn = arg4;\n  128 |         }\n  129 |         const parentContext = ctx ?? api.context.active();\n  130 |         const span = this.startSpan(name, opts, parentContext);\n  131 |         const contextWithSpanSet = api.trace.setSpan(parentContext, span);\n▶ 132 |         return api.context.with(contextWithSpanSet, fn, undefined, span);\n  133 |     }\n  134 |     [inspect_1.inspectCustom](depth, options, inspect) {\n  135 |         const payload = {\n  136 |             instrumentationScope: this.instrumentationScope,\n  137 |             resource: { attributes: (0, inspect_1.settledResourceAttributes)(this._resource) },\n\n### /app/app.mjs:66 in `route` [in-app]\n  61 |   }\n  62 |   if (url.pathname !== '/handled') {\n  63 |     return null;\n  64 |   }\n  65 |   const parent = propagation.extract(ROOT_CONTEXT, headers);\n▶ 66 |   return tracer.startActiveSpan('GET /handled', { kind: SpanKind.SERVER }, parent, (span) => {\n  67 |     try {\n  68 |       return handled(url.searchParams.get('variant'));\n  69 |     } finally {\n  70 |       span.end();\n  71 |     }\n\n### /app/app.mjs:76 in `Server.?` [in-app]\n  71 |     }\n  72 |   });\n  73 | }\n  74 |\n  75 | const server = createServer((req, res) => {\n▶ 76 |   const body = route(new URL(req.url, 'http://localhost'), req.headers);\n  77 |   res.writeHead(body ? 200 : 404, { 'content-type': 'application/json' });\n  78 |   res.end(JSON.stringify(body ?? { status: 'not found' }));\n  79 | });\n  80 | server.listen(8000);\n  81 |\n\n### node:events:519 in `Server.emit` [external]\n_no source context available_\n\n### /app/node_modules/@sentry/core/build/esm/integrations/http/server-subscription.js:113 in `?` [external]\n  108 |             });\n  109 |             const wrap = options.wrapServerEmitRequest;\n  110 |             let emitResult = false;\n  111 |             if (wrap) {\n  112 |               wrap(request, response, normalizedRequest, () => {\n▶ 113 |                 emitResult = target.apply(thisArg, args);\n  114 |               });\n  115 |             } else {\n  116 |               emitResult = target.apply(thisArg, args);\n  117 |             }\n  118 |             return emitResult;\n\n**During handling of the above exception, another exception occurred:**\n\n# TypeError\norder total is not a number\n\n### /app/app.mjs:53 in `handled` [in-app]\n  48 |\n  49 | function handled(variant) {\n  50 |   const traceId = trace.getActiveSpan().spanContext().traceId;\n  51 |   logger.emit({ severityText: 'INFO', body: 'handling a request that fails with a handled error' });\n  52 |   Sentry.addBreadcrumb({ category: 'app', message: 'about to fail', level: 'info' });\n▶ 53 |   const cause = new TypeError('order total is not a number');\n  54 |   const eventId = Sentry.captureException(new Error(message('handled failure', variant), { cause }));\n  55 |   return { trace_id: traceId, event_id: eventId };\n  56 | }\n  57 |\n  58 | function route(url, headers) {\n\n### /app/app.mjs:68 in `?` [in-app]\n  63 |     return null;\n  64 |   }\n  65 |   const parent = propagation.extract(ROOT_CONTEXT, headers);\n  66 |   return tracer.startActiveSpan('GET /handled', { kind: SpanKind.SERVER }, parent, (span) => {\n  67 |     try {\n▶ 68 |       return handled(url.searchParams.get('variant'));\n  69 |     } finally {\n  70 |       span.end();\n  71 |     }\n  72 |   });\n  73 | }\n\n### node:internal/async_local_storage/async_hooks:91 in `AsyncLocalStorage.run` [external]\n_no source context available_\n\n### /app/node_modules/@opentelemetry/context-async-hooks/build/src/AsyncLocalStorageContextManager.js:45 in `AsyncLocalStorageContextManager.with` [external]\n  40 |     active() {\n  41 |         return this._asyncLocalStorage.getStore() ?? api_1.ROOT_CONTEXT;\n  42 |     }\n  43 |     with(context, fn, thisArg, ...args) {\n  44 |         const cb = thisArg == null ? fn : fn.bind(thisArg);\n▶ 45 |         return this._asyncLocalStorage.run(context, cb, ...args);\n  46 |     }\n  47 |     enable() {\n  48 |         return this;\n  49 |     }\n  50 |     disable() {\n\n### /app/node_modules/@opentelemetry/api/build/src/api/context.js:51 in `ContextAPI.with` [external]\n  46 |      * @param fn function to execute in a context\n  47 |      * @param thisArg optional receiver to be used for calling fn\n  48 |      * @param args optional arguments forwarded to fn\n  49 |      */\n  50 |     with(context, fn, thisArg, ...args) {\n▶ 51 |         return this._getContextManager().with(context, fn, thisArg, ...args);\n  52 |     }\n  53 |     /**\n  54 |      * Bind a context to a target function or event emitter\n  55 |      *\n  56 |      * @param context context to bind to the event emitter or function. Defaults to the currently active context\n\n### /app/node_modules/@opentelemetry/sdk-trace/build/src/Tracer.js:132 in `Tracer.startActiveSpan` [external]\n  127 |             fn = arg4;\n  128 |         }\n  129 |         const parentContext = ctx ?? api.context.active();\n  130 |         const span = this.startSpan(name, opts, parentContext);\n  131 |         const contextWithSpanSet = api.trace.setSpan(parentContext, span);\n▶ 132 |         return api.context.with(contextWithSpanSet, fn, undefined, span);\n  133 |     }\n  134 |     [inspect_1.inspectCustom](depth, options, inspect) {\n  135 |         const payload = {\n  136 |             instrumentationScope: this.instrumentationScope,\n  137 |             resource: { attributes: (0, inspect_1.settledResourceAttributes)(this._resource) },\n\n### /app/app.mjs:66 in `route` [in-app]\n  61 |   }\n  62 |   if (url.pathname !== '/handled') {\n  63 |     return null;\n  64 |   }\n  65 |   const parent = propagation.extract(ROOT_CONTEXT, headers);\n▶ 66 |   return tracer.startActiveSpan('GET /handled', { kind: SpanKind.SERVER }, parent, (span) => {\n  67 |     try {\n  68 |       return handled(url.searchParams.get('variant'));\n  69 |     } finally {\n  70 |       span.end();\n  71 |     }\n\n### /app/app.mjs:76 in `Server.?` [in-app]\n  71 |     }\n  72 |   });\n  73 | }\n  74 |\n  75 | const server = createServer((req, res) => {\n▶ 76 |   const body = route(new URL(req.url, 'http://localhost'), req.headers);\n  77 |   res.writeHead(body ? 200 : 404, { 'content-type': 'application/json' });\n  78 |   res.end(JSON.stringify(body ?? { status: 'not found' }));\n  79 | });\n  80 | server.listen(8000);\n  81 |\n\n### node:events:519 in `Server.emit` [external]\n_no source context available_\n\n### /app/node_modules/@sentry/core/build/esm/integrations/http/server-subscription.js:113 in `?` [external]\n  108 |             });\n  109 |             const wrap = options.wrapServerEmitRequest;\n  110 |             let emitResult = false;\n  111 |             if (wrap) {\n  112 |               wrap(request, response, normalizedRequest, () => {\n▶ 113 |                 emitResult = target.apply(thisArg, args);\n  114 |               });\n  115 |             } else {\n  116 |               emitResult = target.apply(thisArg, args);\n  117 |             }\n  118 |             return emitResult;"
+}

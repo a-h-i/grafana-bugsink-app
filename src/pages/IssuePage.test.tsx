@@ -106,6 +106,7 @@ function eventDetail(id: string, overrides: Partial<EventDetail> = {}): EventDet
     stacktraceMd: null,
     notices: [],
     bugsinkUrl: `http://bugsink/${id}`,
+    links: [],
     ...overrides,
   };
 }
@@ -445,6 +446,23 @@ describe('IssuePage', () => {
       renderPage(`${PATH}?ds=bugsink`);
 
       expect(await screen.findByText('Loading event...')).toBeInTheDocument();
+    });
+
+    it('keeps the Event section pending until the summary has loaded', async () => {
+      let resolveIssue: (issue: IssueDetail) => void = () => {};
+      mockSources.bugsink.getIssue.mockReturnValue(new Promise<IssueDetail>((resolve) => (resolveIssue = resolve)));
+
+      renderPage(`${PATH}?ds=bugsink`);
+
+      await waitFor(() => expect(mockSources.bugsink.getEvent).toHaveBeenCalledWith('e1'));
+      const section = (await screen.findByRole('heading', { name: 'Event' })).closest('section')!;
+      expect(within(section).getByText('Loading event...')).toBeInTheDocument();
+      expect(screen.queryByText('sdk-e1')).not.toBeInTheDocument();
+
+      await act(async () => resolveIssue(ISSUE));
+
+      expect(await screen.findByText('sdk-e1')).toBeInTheDocument();
+      expect(within(section).queryByText('Loading event...')).not.toBeInTheDocument();
     });
 
     it('has no Event section when the issue has no events', async () => {

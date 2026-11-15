@@ -24,6 +24,7 @@ type Datasource struct {
 	settingsErr   string // the health check's message for invalid settings, or empty
 	url           string // the Bugsink URL as entered, for messages
 	browserURL    string // base of links to Bugsink's pages, no trailing slash
+	links         linkSettings
 	healthTimeout time.Duration
 	issueCache    *cache[bugsink.IssueList]
 	projectCache  *cache[projectsResult]
@@ -98,7 +99,12 @@ func (d *Datasource) configure(ctx context.Context, s backend.DataSourceInstance
 			return msgBrowserURLScheme
 		}
 	}
+	links, invalid := parseLinkSettings(s.JSONData)
+	if invalid != "" {
+		return invalid
+	}
 	d.browserURL = strings.TrimRight(browserURL, "/")
+	d.links = links
 	d.client = client
 	return ""
 }

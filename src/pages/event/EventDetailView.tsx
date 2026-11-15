@@ -3,7 +3,8 @@ import React from 'react';
 import { css } from '@emotion/css';
 import { dateTimeFormat, GrafanaTheme2 } from '@grafana/data';
 import { TimeZone } from '@grafana/schema';
-import { Alert, Column, InteractiveTable, Text, useStyles2 } from '@grafana/ui';
+import { Alert, Column, InteractiveTable, LinkButton, Stack, Text, useStyles2 } from '@grafana/ui';
+import { exploreHref } from '../../datasource/links';
 import { EventDetail, KeyValue } from '../../datasource/types';
 import { PAGE_SIZE } from '../issues/IssueTable';
 import { Breadcrumbs } from './Breadcrumbs';
@@ -26,6 +27,7 @@ function getStyles(theme: GrafanaTheme2) {
       margin: theme.spacing(0, 0, 2),
       dd: { margin: 0, overflowWrap: 'anywhere' },
     }),
+    actions: css({ margin: theme.spacing(0, 0, 2) }),
     message: css({ overflowWrap: 'anywhere' }),
     note: css({ margin: theme.spacing(0, 0, 1), color: theme.colors.text.secondary }),
     pre: css({ padding: theme.spacing(1), overflowX: 'auto', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }),
@@ -84,17 +86,35 @@ export function EventDetailView({ event, timeZone }: { event: EventDetail; timeZ
           </React.Fragment>
         ))}
       </dl>
+      <div className={styles.actions}>
+        <Stack wrap="wrap">
+          {event.links.map((link) => (
+            <LinkButton key={link.title} href={exploreHref(link)} variant="secondary">
+              {link.title}
+            </LinkButton>
+          ))}
+          <LinkButton
+            href={event.bugsinkUrl}
+            target="_blank"
+            rel="noreferrer"
+            icon="external-link-alt"
+            variant="secondary"
+          >
+            Open event in Bugsink
+          </LinkButton>
+        </Stack>
+      </div>
       {event.notices.map((notice, i) => (
         <Alert key={i} severity="warning" title={notice} />
       ))}
+      {event.message !== '' && (
+        <Section title="Message">
+          <p className={styles.message}>{event.message}</p>
+        </Section>
+      )}
       {hasExceptions && (
         <Section title="Exception">
           <ExceptionChain exceptions={event.exceptions} platform={event.platform} />
-        </Section>
-      )}
-      {!hasExceptions && event.message !== '' && (
-        <Section title="Message">
-          <p className={styles.message}>{event.message}</p>
         </Section>
       )}
       {!hasFrames && (

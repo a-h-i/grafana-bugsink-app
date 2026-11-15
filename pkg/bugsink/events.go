@@ -45,17 +45,13 @@ func (c *Client) ListEvents(ctx context.Context, issueID, query string, maxPages
 	return list, nil
 }
 
-// LookupEvent finds an event of a project by the event id its SDK sent.
-func (c *Client) LookupEvent(ctx context.Context, projectID int, eventID uuid.UUID) (Event, error) {
+// LookupEvent finds an event of a project by the event id its SDK sent and parses its payload.
+func (c *Client) LookupEvent(ctx context.Context, projectID int, eventID uuid.UUID) (EventDetail, error) {
 	resp, err := c.gen.EventsLookupRetrieve(ctx, &gen.EventsLookupRetrieveParams{EventId: eventID, Project: projectID})
 	if err != nil {
-		return Event{}, err
+		return EventDetail{}, err
 	}
-	var body gen.EventList
-	if err := decodeJSON(resp, &body); err != nil {
-		return Event{}, err
-	}
-	return eventOf(body), nil
+	return decodeEventDetail(resp)
 }
 
 func eventOf(r gen.EventList) Event {

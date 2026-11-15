@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -170,6 +171,53 @@ func TestParseJavaScript(t *testing.T) {
 	}
 	if ev.Message != "x" || ev.Platform != "javascript" || len(ev.Contexts) != 1 || ev.Contexts[0].Name != "browser" {
 		t.Fatalf("event = %+v", ev)
+	}
+}
+
+func TestParseNodeHandled(t *testing.T) {
+	ev := getFixture(t, "node-handled")
+	if ev.Platform != "node" || ev.Environment != "development" || ev.Release != "sample-js@0.1.0" {
+		t.Fatalf("event = %+v", ev)
+	}
+	if !regexp.MustCompile(`^[0-9a-f]{32}$`).MatchString(ev.TraceID) {
+		t.Fatalf("trace id = %q", ev.TraceID)
+	}
+	if len(ev.Exceptions) != 2 || ev.Exceptions[0].Type != "TypeError" || ev.Exceptions[0].Value != "order total is not a number" ||
+		ev.Exceptions[1].Type != "Error" {
+		t.Fatalf("exceptions = %+v", ev.Exceptions)
+	}
+	var app *Frame
+	for _, f := range ev.Exceptions[0].Frames {
+		if f.InApp && strings.HasSuffix(f.Filename, "app.mjs") {
+			app = &f
+			break
+		}
+	}
+	if app == nil || app.Lineno == nil || app.Colno == nil || app.ContextLine == nil {
+		t.Fatalf("in-app frame = %+v", app)
+	}
+	if !reflect.DeepEqual(ev.Tags, []KeyValue{{"service", "sample-js"}}) {
+		t.Fatalf("tags = %v", ev.Tags)
+	}
+	if len(ev.Breadcrumbs) != 1 || ev.Breadcrumbs[0].Message != "about to fail" || ev.Breadcrumbs[0].Timestamp == nil {
+		t.Fatalf("breadcrumbs = %+v", ev.Breadcrumbs)
+	}
+}
+
+func TestFixturesAreScrubbed(t *testing.T) {
+	forbidden := regexp.MustCompile(`server_name|\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b|/tmp/|/home/|0x[0-9a-fA-F]{8}|Mozilla/`)
+	files, err := filepath.Glob(filepath.Join("testdata", "events", "*.json"))
+	if err != nil || len(files) == 0 {
+		t.Fatalf("fixtures %v, err %v", files, err)
+	}
+	for _, f := range files {
+		b, err := os.ReadFile(f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if m := forbidden.Find(b); m != nil {
+			t.Errorf("%s contains %q", f, m)
+		}
 	}
 }
 
@@ -401,6 +449,19 @@ func TestParseBreadcrumbTimestamps(t *testing.T) {
 	}
 }
 
+func TestParseBreadcrumbTimeWithoutZone(t *testing.T) {
+	bs := parseEvent(json.RawMessage(`{"breadcrumbs":[{"timestamp":"2026-11-15T07:52:59.387"},{"timestamp":"2026-11-15T07:52:59+02:00"}]}`), "").Breadcrumbs
+	if len(bs) != 2 || bs[0].Timestamp == nil || bs[1].Timestamp == nil {
+		t.Fatalf("breadcrumbs = %+v", bs)
+	}
+	if got := bs[0].Timestamp.UTC().Format(time.RFC3339Nano); got != "2026-11-15T07:52:59.387Z" {
+		t.Fatalf("time = %s", got)
+	}
+	if got := bs[1].Timestamp.UTC().Format(time.RFC3339); got != "2026-11-15T05:52:59Z" {
+		t.Fatalf("offset time = %s", got)
+	}
+}
+
 // wrongValues replaces one node of a payload at a time.
 var wrongValues = []any{nil, 0, -1, 1e300, "", "x", true, []any{}, []any{nil, 1, "a"}, obj{}, obj{"values": nil}, obj{"values": "x"}, obj{"frames": 5}}
 
@@ -428,7 +489,7 @@ func mutations(v any, emit func()) {
 }
 
 func TestParseNeverPanicsOnMutatedFixtures(t *testing.T) {
-	for _, name := range []string{"python-handled", "python-chained", "python-message-threads", "message-only", "javascript-error"} {
+	for _, name := range []string{"python-handled", "python-chained", "python-message-threads", "message-only", "javascript-error", "node-handled"} {
 		var doc struct {
 			Data         any    `json:"data"`
 			StacktraceMD string `json:"stacktrace_md"`
@@ -459,7 +520,7 @@ func TestParseDeepNesting(t *testing.T) {
 }
 
 func FuzzParseEvent(f *testing.F) {
-	for _, name := range []string{"python-unhandled", "python-chained", "python-message-threads", "message-only", "javascript-error"} {
+	for _, name := range []string{"python-unhandled", "python-chained", "python-message-threads", "message-only", "javascript-error", "node-handled"} {
 		var doc struct {
 			Data json.RawMessage `json:"data"`
 		}

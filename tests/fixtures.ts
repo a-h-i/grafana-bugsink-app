@@ -25,11 +25,11 @@ export function section(page: Page, heading: string | RegExp) {
   return page.locator('section').filter({ has: page.locator(':scope > :is(h2, h3)').filter({ hasText: title }) });
 }
 
-export async function openFirstIssue(page: Page) {
+export async function openFirstIssue(page: Page, name: string | RegExp = /^SAMPLE-PYTHON-/) {
   const firstIssue = page
     .locator('tbody tr')
     .first()
-    .getByRole('link', { name: /^SAMPLE-PYTHON-/ });
+    .getByRole('link', { name });
   await expect(async () => {
     await page.reload();
     await expect(firstIssue).toBeVisible({ timeout: 3000 });

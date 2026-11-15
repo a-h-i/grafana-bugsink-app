@@ -427,7 +427,7 @@ func TestEventResource(t *testing.T) {
 	}
 	sort.Strings(keys)
 	wantKeys := []string{"breadcrumbs", "bugsinkUrl", "contexts", "environment", "eventId", "exceptions", "id",
-		"ingestedAt", "issueId", "level", "message", "notices", "platform", "project", "projectId", "release",
+		"ingestedAt", "issueId", "level", "links", "message", "notices", "platform", "project", "projectId", "release",
 		"stacktraceMd", "tags", "timestamp", "traceId", "transaction"}
 	if !reflect.DeepEqual(keys, wantKeys) {
 		t.Fatalf("keys %v, want %v", keys, wantKeys)
@@ -599,4 +599,64 @@ func TestEventRouteErrors(t *testing.T) {
 			t.Fatalf("status %d body %s", r.status, r.body)
 		}
 	})
+}
+
+func eventLinks(t *testing.T, fixture, jsonData string) any {
+	t.Helper()
+	return eventLinksWithTrace(t, fixture, jsonData, "")
+}
+
+// eventLinksWithTrace answers the event's links, with the fixture's trace id replaced when traceID is not empty.
+func eventLinksWithTrace(t *testing.T, fixture, jsonData, traceID string) any {
+	t.Helper()
+	f := newFakeBugsink(t)
+	id, body := eventFixture(t, fixture)
+	if traceID != "" {
+		body = strings.ReplaceAll(body, "97dc67918c526f3d407fdcec08e956da", traceID)
+	}
+	f.eventDetails = map[string]string{id: body}
+	ds := newInstance(t, f.srv.URL, secretToken, jsonData)
+	r := callResource(t, ds, "GET", "events/"+id)
+	if r.status != 200 {
+		t.Fatalf("status %d body %s", r.status, r.body)
+	}
+	var got map[string]any
+	if err := json.Unmarshal([]byte(r.body), &got); err != nil {
+		t.Fatal(err)
+	}
+	return got["links"]
+}
+
+func TestEventResourceLinks(t *testing.T) {
+	const both = `{"tempoDatasourceUid":"tempo","lokiDatasourceUid":"loki"}`
+	rng := map[string]any{"from": "2026-11-13T23:14:57.360302Z", "to": "2026-11-13T23:44:57.360302Z"}
+	want := []any{
+		map[string]any{"title": "Open trace", "internal": map[string]any{
+			"query":         map[string]any{"refId": "A", "queryType": "traceId", "query": "97dc67918c526f3d407fdcec08e956da"},
+			"datasourceUid": "tempo", "timeRange": rng}},
+		map[string]any{"title": "Open logs", "internal": map[string]any{
+			"query": map[string]any{"refId": "A", "queryType": "range",
+				"expr": `{service_name="sample-python"} | trace_id="97dc67918c526f3d407fdcec08e956da"`},
+			"datasourceUid": "loki", "timeRange": rng}},
+	}
+	if got := eventLinks(t, "python-unhandled", both); !reflect.DeepEqual(got, want) {
+		t.Fatalf("links %#v, want %#v", got, want)
+	}
+	for name, c := range map[string]struct{ fixture, jsonData string }{
+		"no uids":     {"python-unhandled", `{}`},
+		"no trace id": {"message-only", both},
+	} {
+		if got := eventLinks(t, c.fixture, c.jsonData); !reflect.DeepEqual(got, []any{}) {
+			t.Errorf("%s: links %#v, want []", name, got)
+		}
+	}
+}
+
+func TestEventResourceMalformedTraceIDHasNoLinks(t *testing.T) {
+	const both = `{"tempoDatasourceUid":"tempo","lokiDatasourceUid":"loki"}`
+	for _, id := range []string{"${__user.login}", "97DC67918C526F3D407FDCEC08E956DA", "97dc67918c526f3d"} {
+		if got := eventLinksWithTrace(t, "python-unhandled", both, id); !reflect.DeepEqual(got, []any{}) {
+			t.Errorf("trace id %q: links %#v, want []", id, got)
+		}
+	}
 }

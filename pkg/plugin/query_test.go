@@ -616,3 +616,23 @@ func TestProjectsCancelledReadIsNotRemembered(t *testing.T) {
 		t.Fatalf("projects %v, err %v", projects, err)
 	}
 }
+
+func TestEventsQueryLinks(t *testing.T) {
+	f := newFakeBugsink(t)
+	ids, page := traceIssues(1)
+	f.pages = []string{page}
+	f.eventPages = map[string][]string{ids[0]: {eventAt(uuidN(101), uuidN(201), ids[0], olderThanRange)}}
+	ds := newInstance(t, f.srv.URL, secretToken, `{"browserUrl":"http://b","tempoDatasourceUid":"tempo","lokiDatasourceUid":"loki"}`)
+	frame := frameOf(t, runQuery(t, ds, `{"queryType":"events","q":"trace:0123456789abcdef0123456789abcdef"}`))
+
+	if got := stringColumn(t, frame, "logs_query"); !reflect.DeepEqual(got, []string{`{service_name="alpha"} | trace_id="0123456789abcdef0123456789abcdef"`}) {
+		t.Fatalf("logs queries %v", got)
+	}
+	links := traceLinks(t, frame)
+	if len(links) != 2 || links[0].Title != "Open trace" || links[1].Title != "Open logs" {
+		t.Fatalf("links %+v", links)
+	}
+	if want := olderThanRange.Add(-15 * time.Minute); !links[0].Internal.Range.From.Equal(want) {
+		t.Fatalf("range from %v, want %v", links[0].Internal.Range.From, want)
+	}
+}

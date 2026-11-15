@@ -18,7 +18,7 @@ const (
 	maxTraceEventPages = 1
 )
 
-var traceTerm = regexp.MustCompile(`(^|\s)trace:\S`)
+var traceTerm = regexp.MustCompile(`(^|\s)trace:(\S+)`)
 
 // eventsQuery is a validated events query; the first set of EventID (uuid.Nil when absent), Issue, trace term in Query decides the mode.
 type eventsQuery struct {
@@ -28,8 +28,18 @@ type eventsQuery struct {
 }
 
 type eventRow struct {
-	event bugsink.Event
-	issue string // the short id
+	event   bugsink.Event
+	issue   string               // the short id
+	traceID string               // from the query's trace term or the payload; empty when unknown
+	detail  *bugsink.EventDetail // set for an event id lookup
+}
+
+// traceIDOf returns the id of the first trace:<id> term of a search, or empty.
+func traceIDOf(query string) string {
+	if m := traceTerm.FindStringSubmatch(query); m != nil {
+		return m[2]
+	}
+	return ""
 }
 
 type eventsResult struct {
@@ -93,15 +103,16 @@ func (d *Datasource) events(ctx context.Context, q eventsQuery) (eventsResult, e
 }
 
 func (d *Datasource) eventByID(ctx context.Context, q eventsQuery) (eventsResult, error) {
-	event, err := d.client.LookupEvent(ctx, q.ProjectID, q.EventID)
+	detail, err := d.client.LookupEvent(ctx, q.ProjectID, q.EventID)
 	if err != nil {
 		return eventsResult{}, err
 	}
+	event := detail.Event
 	issue, err := d.client.GetIssue(ctx, event.IssueID)
 	if err != nil {
 		return eventsResult{}, err
 	}
-	return eventsResult{rows: []eventRow{{event: event, issue: issue.FriendlyID}}}, nil
+	return eventsResult{rows: []eventRow{{event: event, issue: issue.FriendlyID, traceID: detail.TraceID, detail: &detail}}}, nil
 }
 
 func (d *Datasource) eventsOfIssue(ctx context.Context, q eventsQuery) (eventsResult, error) {
@@ -113,7 +124,7 @@ func (d *Datasource) eventsOfIssue(ctx context.Context, q eventsQuery) (eventsRe
 	if err != nil {
 		return eventsResult{}, err
 	}
-	res := eventsResult{rows: rowsOf(list.Events, issue.FriendlyID)}
+	res := eventsResult{rows: rowsOf(list.Events, issue.FriendlyID, traceIDOf(q.Query))}
 	if list.Truncated {
 		res.notices = append(res.notices, fmt.Sprintf("Only the newest %d events were read.", maxEventPages*bugsink.PageSize))
 	}
@@ -139,7 +150,7 @@ func (d *Datasource) eventsOfTrace(ctx context.Context, q eventsQuery) (eventsRe
 		if err != nil {
 			return eventsResult{}, err
 		}
-		res.rows = append(res.rows, rowsOf(list.Events, issue.FriendlyID)...)
+		res.rows = append(res.rows, rowsOf(list.Events, issue.FriendlyID, traceIDOf(q.Query))...)
 		if list.Truncated {
 			res.notices = append(res.notices,
 				fmt.Sprintf("Only the newest %d events of %s in this trace were read.", maxTraceEventPages*bugsink.PageSize, issue.FriendlyID))
@@ -148,10 +159,10 @@ func (d *Datasource) eventsOfTrace(ctx context.Context, q eventsQuery) (eventsRe
 	return res, nil
 }
 
-func rowsOf(events []bugsink.Event, issue string) []eventRow {
+func rowsOf(events []bugsink.Event, issue, traceID string) []eventRow {
 	rows := make([]eventRow, len(events))
 	for i, e := range events {
-		rows[i] = eventRow{event: e, issue: issue}
+		rows[i] = eventRow{event: e, issue: issue, traceID: traceID}
 	}
 	return rows
 }

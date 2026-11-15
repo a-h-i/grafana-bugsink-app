@@ -47,7 +47,7 @@ sentry_sdk.init(
     environment="development",
     release=f"{SERVICE}@{VERSION}",
     attach_stacktrace=True,
-    integrations=[OTLPIntegration(setup_otlp_traces_exporter=False)],
+    integrations=[OTLPIntegration(setup_otlp_traces_exporter=False, setup_propagator=False)],
 )
 sentry_sdk.set_tag("service", SERVICE)
 
@@ -99,8 +99,15 @@ def chained(variant: str | None = None):
 
 @api.get("/message")
 def message(variant: str | None = None):
-    event_id = sentry_sdk.capture_message(_message("message without exception", variant), level="warning")
-    return {"event_id": event_id}
+    result: dict[str, str | None] = {}
+
+    def capture() -> None:
+        result["event_id"] = sentry_sdk.capture_message(_message("message without exception", variant), level="warning")
+
+    worker = threading.Thread(target=capture)
+    worker.start()
+    worker.join()
+    return {"event_id": result["event_id"]}
 
 
 @api.get("/error")

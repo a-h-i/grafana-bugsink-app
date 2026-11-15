@@ -23,6 +23,7 @@ Create the token in Bugsink. A token has capabilities, and it can be bound to on
    - **Bugsink URL**: the address of Bugsink itself, for example `https://bugsink.example.com`. Do not add `/api`.
    - **Browser URL** (optional): the address of Bugsink as your browser reaches it. The plugin uses it for the links to issues. Leave it empty when it is the same as the Bugsink URL. It differs when Grafana and your browser reach Bugsink by different addresses. In the development stack, Grafana reaches Bugsink at `http://bugsink:8000` and the browser at `http://localhost:8800`, so the Bugsink URL is `http://bugsink:8000` and the Browser URL is `http://localhost:8800`.
    - **API token**: the token you created. Grafana stores it encrypted and does not show it again.
+   - **Trace and log links** (optional): the Tempo and Loki data sources and the link settings. See [Trace and log links](#trace-and-log-links).
 5. Click `Save & test`. A data source provisioned from a file has a `Test` button instead.
 
 The test makes at least one read request per capability and reports the result. It stops at the first answer that ends the check: a connection error or timeout, a rejected token, an answer that is not Bugsink's, or an unexpected answer to a capability check.
@@ -64,9 +65,11 @@ The Event section shows the newest event of the issue, the first row of Events. 
 The section has these parts, in this order:
 
 - **Rows**: Event ID, Timestamp, Level, Environment, Release, Transaction and Trace ID. A row the event does not have is left out, except Event ID.
+- **Actions**: `Open trace` and `Open logs` when the data source has the target and the event has a trace ID of 32 lowercase hexadecimal characters (see [Trace and log links](#trace-and-log-links)), and `Open event in Bugsink`, which opens the event in Bugsink in a new tab.
 - **Notices**: a warning for each bound the event reached (see [Event bounds](#event-bounds)).
-- **Exception**: the exceptions of the event, each with its type, its value and the badge `Unhandled` when the SDK marked it so. For `python` events the exceptions are in the order Bugsink holds them, the first cause first, with the frames from the oldest call to the newest, and `During handling of the above exception, another exception occurred:` between two exceptions. For every other platform the last exception comes first, the frames run from the newest call to the oldest, and `Caused by:` stands between two exceptions. A frame shows `file:line:column in function`. A frame the SDK marked as part of your application (`in_app`) shows in bold with up to 5 lines of source code before and after its line, when the SDK sent them. Other frames are folded, in groups of consecutive frames, under `<n> other frames`, without source lines. When no frame of an exception is part of your application, every frame shows.
-- **Message** and **Stack trace**: for an event without exceptions. Message shows when the event has a message. Stack trace is Bugsink's own text of the stack trace, shown as plain text, when the event has frames outside its exceptions, for example the stack trace of a message captured with `attach_stacktrace`. The same text shows when exceptions exist but none has frames. Bugsink writes this text, not the plugin, and it can include local variables. An event without frames shows `No stack trace.`
+- **Message**: the event's message, when it has one, above the exceptions or the stack trace.
+- **Exception**: the exceptions of the event, each with its type (`Unknown exception` when it has none), its value and the badge `Unhandled` when the SDK marked it so. For `python` events the exceptions are in the order Bugsink holds them, the first cause first, with the frames from the oldest call to the newest, and `During handling of the above exception, another exception occurred:` between two exceptions. For every other platform the last exception comes first, the frames run from the newest call to the oldest, and `Caused by:` stands between two exceptions. A frame shows `file:line:column in function`. A frame the SDK marked as part of your application (`in_app`) shows in bold with up to 5 lines of source code before and after its line, when the SDK sent them. Other frames are folded, in groups of consecutive frames, under `<n> other frames`, without source lines. When no frame of an exception is part of your application, every frame shows.
+- **Stack trace**: for an event without exceptions. It is Bugsink's own text of the stack trace, shown as plain text, when the event has frames outside its exceptions, for example the stack trace of a message captured with `attach_stacktrace`. The same text shows when exceptions exist but none has frames. Bugsink writes this text, not the plugin, and it can include local variables. An event without frames shows `No stack trace.`
 - **Breadcrumbs**: the trail of actions before the event, oldest first, with Time, Type, Category, Level and Message. The message column shows the breadcrumb's data when it has no message.
 - **Event tags**: the tags of this one event, as Tag and Value.
 - **Contexts**: the contexts the SDK sent, such as `runtime` or `trace`, as Context, Key and Value.
@@ -144,7 +147,7 @@ An events query has one of three modes. It uses the first one that applies, in t
 
 Search, Issue and Event ID accept dashboard variables, for example `trace:$trace`. With none of the three, the table is empty and carries the notice `An events query needs an issue, an event ID or trace:<id> in Search.` Error messages: `"<issue>" is not an issue id.`, `The event ID must be a UUID.` and `Looking up an event ID needs a project.`
 
-The result is a table with the columns Timestamp, Event ID, Issue, Project, Ingested at, id, issue_id and Project ID. The Event ID cell links to the event in Bugsink, in a new tab. The id and issue_id columns are what the link uses.
+The result is a table with the columns Timestamp, Event ID, Issue, Project, Ingested at, Trace ID, id, issue_id and Project ID. The Event ID cell links to the event in Bugsink, in a new tab. The id and issue_id columns are what the link uses. Trace ID carries the trace links (see [Trace and log links](#trace-and-log-links)).
 
 The dashboard time range does not apply to events: an issue, an event ID or a trace already limits the list.
 
@@ -157,6 +160,61 @@ The dashboard time range does not apply to events: an issue, an event ID or a tr
 ### Example
 
 The development stack has the dashboard `Bugsink trace`. Type a trace id in `Trace ID`, and it shows two tables: the issues of the trace and its events.
+
+## Trace and log links
+
+An event can open its trace in Tempo and its log lines in Loki.
+
+### Settings
+
+The data source editor has these fields under `Trace and log links`:
+
+| Field | What it does | Default |
+| :--- | :--- | :--- |
+| Tempo data source | `Open trace` runs a trace ID query on this data source. | none |
+| Loki data source | `Open logs` runs the logs query on this data source. | none |
+| Time window | Links open this many minutes before and after the event. Whole minutes, 1 to 1440. | 15 (when empty) |
+| Logs query | The LogQL of `Open logs`, with variables (see below). | `{service_name="${service}"} \| trace_id="${trace_id}"` |
+| Service tag | The event tag that holds the service name for `${service}`. | `service` |
+
+A link is offered only for a data source you set. With neither Tempo nor Loki set, there are no buttons and no links. `${service}` is the Bugsink project name when the event does not have the service tag or its value is empty, and always when `Service tag` is empty. A window outside 1 to 1440 is refused as an invalid setting.
+
+### Logs query template
+
+The template is LogQL with these variables: `${trace_id}`, `${service}`, `${project}`, `${environment}`, `${release}` and `${tag:<name>}`, the value of the event tag `<name>`. An unknown `${...}` stays as written.
+
+- Put every variable inside a double-quoted string, for example `trace_id="${trace_id}"`. A template with a variable inside backticks or outside quotes is refused as an invalid setting.
+- Values are escaped for a double-quoted LogQL string. With `=~` or `!~` the value is not escaped for a regular expression.
+- In a dashboard table, `${environment}`, `${release}` and `${tag:<name>}` render empty, except for an event ID query, which has the event. In the other rows, `${service}` is the project name.
+
+### Event section
+
+With a trace ID of 32 lowercase hexadecimal characters on the event and a target set, the Event section shows `Open trace` and `Open logs`. Both open Explore in the same tab, on the event's time plus and minus the window. The buttons are shown without asking Tempo. A trace Tempo does not have opens Explore with Tempo's own not-found message. Back from Explore can need more than one press: Explore adds its own history entries.
+
+### Dashboards and Explore
+
+An events query has a `Trace ID` column. Its cells carry the links `Open trace` and `Open logs`, in the cell menu. The links open Explore on the event's time plus and minus the window; for a table of several events, from the first to the last timestamp, plus and minus the window. Inside Explore, Grafana keeps Explore's own time range.
+
+The column is filled for a query with `trace:<id>` in Search and for an event ID query. An issue-only query carries no trace ID, so it has no links. Without a Tempo or a Loki data source, the column has no links. A row whose trace ID is not 32 lowercase hexadecimal characters has no links. The Logs query is rendered per row, in a `logs_query` field marked hidden, which a Grafana table can still show. The Loki link reads it. Do not remove it from a panel.
+
+## Linking errors to traces
+
+The links need Bugsink events that carry the trace ID of your OpenTelemetry trace. This happens when the Sentry SDK shares the OpenTelemetry trace context.
+
+Python:
+
+- Add `OTLPIntegration(setup_otlp_traces_exporter=False, setup_propagator=False)` to `sentry_sdk.init`. Your own OpenTelemetry setup exports the spans.
+- Put the OpenTelemetry ASGI middleware outermost, so the request span is still active when Sentry captures an unhandled error.
+
+Node.js:
+
+- Run your own OpenTelemetry tracer provider, and add `Sentry.openTelemetryIntegration()` to the Sentry integrations.
+
+An event captured outside a span, for example in a new thread, carries a trace ID that Tempo does not have. Tempo then says the trace is not found.
+
+An incoming `traceparent` header is honoured with `setup_propagator=False`. The default of the integration ignores it and starts a new trace.
+
+To go the other way, from a trace to its errors, use the dashboard `Bugsink trace` of the development stack, or an events query with `trace:<id>` in Search. Type the trace ID in lower case, as the SDKs and Tempo show it: Bugsink matches `trace:` terms case-sensitively.
 
 ## Test results
 
@@ -173,7 +231,9 @@ A failed test says one of the following. `<url>` is the URL as you typed it.
 | `The Bugsink URL must start with http:// or https://.`                                                                       | Add the scheme to the URL.                                                                                                                                                                                                                                    |
 | `The browser URL must start with http:// or https://.`                                                                       | Fix the Browser URL. It must be an http or https address without credentials, a query string or a fragment, or empty.                                                                                                                                       |
 | `Enter an API token.`                                                                                                        | Fill in the API token field.                                                                                                                                                                                                                                  |
-| `The data source settings are invalid.`                                                                                      | Grafana could not build an HTTP client from the data source's settings. The editor has only the URL, the browser URL and the token, so this can only come from settings supplied through provisioning or the API, for example a TLS certificate setting. Correct that setting. |
+| `The data source settings are invalid.` | Grafana could not build an HTTP client from a setting supplied through provisioning or the API, for example a TLS certificate setting, or a link setting has the wrong type, for example a number where a data source UID belongs. Correct that setting. |
+| `The link time window must be a whole number of minutes from 1 to 1440.` | Fix the Time window: a whole number from 1 to 1440, or empty for 15. |
+| `In the logs query, put every variable inside double quotes.` | Edit the Logs query so that every variable sits inside a double-quoted string. |
 | `Cannot reach Bugsink at <url>: <cause>.`                                                                                    | Grafana's server could not connect. The cause says why: a refused connection, a DNS failure or a TLS error. Check the address, the network path from the Grafana server to Bugsink and the certificate.                                                       |
 | `Bugsink at <url> did not answer within 10 seconds.`                                                                         | Check that Bugsink is running and not overloaded, and that nothing between Grafana and Bugsink drops the traffic.                                                                                                                                             |
 | `Bugsink rejected the API token. Check that it was copied in full and has not been deleted.`                                 | Paste the token again, or create a new one in Bugsink.                                                                                                                                                                                                        |

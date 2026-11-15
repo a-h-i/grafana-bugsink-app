@@ -10,3 +10,4 @@
 - Issue detail page in the app: summary, tag values with counts, history and the issue's events; the list's short id opens it.
 - Events query: the events of one issue, one event looked up by its SDK id, or every event of a trace, as a table.
 - Event detail on the issue page: exception chain and stack trace with in-app frames open and the other frames folded, breadcrumbs, tags and contexts; the newest event by default, any other from the event list.
+- Open trace and Open logs on events, links on the trace ID of event tables, and the Tempo, Loki, time window, logs query and service tag settings. The Event section also has `Open event in Bugsink`, shows an event's message above its exceptions and names an exception without a type `Unknown exception`.

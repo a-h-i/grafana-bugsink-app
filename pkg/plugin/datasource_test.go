@@ -254,3 +254,27 @@ func TestHealthChecksShareOneConnection(t *testing.T) {
 		t.Fatalf("opened %d connections, want 1", n)
 	}
 }
+
+func TestLinkSettingsInHealthCheck(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(bugsinkHandler))
+	defer srv.Close()
+	ok := newInstance(t, srv.URL, secretToken, `{"browserUrl":"http://b"}`)
+	if res := check(t, ok); res.Status != backend.HealthStatusOk {
+		t.Fatalf("no link keys: %v %q", res.Status, res.Message)
+	}
+	if ok.links.window != defaultLinkWindow || ok.links.logsQuery != defaultLogsQuery {
+		t.Fatalf("links = %+v", ok.links)
+	}
+	bad := newInstance(t, srv.URL, secretToken, `{"linkWindowMinutes":0,"lokiDatasourceUid":"loki"}`)
+	if res := check(t, bad); res.Status != backend.HealthStatusError || res.Message != msgLinkWindow {
+		t.Fatalf("window 0: %v %q", res.Status, res.Message)
+	}
+	unquoted := newInstance(t, srv.URL, secretToken, `{"logsQuery":"{service_name=`+"`${service}`"+`}"}`)
+	if res := check(t, unquoted); res.Status != backend.HealthStatusError || res.Message != msgLogsQueryQuotes {
+		t.Fatalf("unquoted variable: %v %q", res.Status, res.Message)
+	}
+	set := newInstance(t, srv.URL, secretToken, `{"lokiDatasourceUid":"loki","tempoDatasourceUid":"tempo"}`)
+	if set.links.lokiUID != "loki" || set.links.tempoUID != "tempo" {
+		t.Fatalf("links = %+v", set.links)
+	}
+}

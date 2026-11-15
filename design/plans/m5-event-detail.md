@@ -301,7 +301,7 @@ export function EventTable(props: { rows: EventRow[]; timeZone: TimeZone; select
 
 ## Not in this milestone
 
-Open trace and Open logs buttons and data links on event frames (M6, which reads `traceId`, `timestamp`, `tags`, `environment`, `release` and `project` from `EventDetail`); the JavaScript sample app and source-mapped frames (Bugsink maps them in `stacktrace_md` but `data` holds minified frames; M6 checks); frame locals, request, user, extra, modules and SDK; thread stacks as structure; Newer/Older event buttons; a warning when `event` names another issue's event; caching event reads; event content in dashboard frames.
+Open trace and Open logs buttons and data links on event frames (M6, which reads `traceId`, `timestamp`, `tags`, `environment`, `release` and `project` from `EventDetail`); the JavaScript sample app and source-mapped frames (Bugsink maps them in `stacktrace_md` but `data` holds minified frames; M6 checks); frame locals, request, user, extra, modules and SDK; thread stacks as structure; Newer/Older event buttons; caching event reads; event content in dashboard frames.
 
 ## After the last task
 

@@ -1,7 +1,15 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-import { createDataFrame, DataSourceInstanceSettings, FieldType, ScopedVars, TimeRange, dateTime } from '@grafana/data';
-import { setTemplateSrv } from '@grafana/runtime';
-import { of } from 'rxjs';
+import {
+  createDataFrame,
+  DataLink,
+  DataSourceInstanceSettings,
+  FieldType,
+  ScopedVars,
+  TimeRange,
+  dateTime,
+} from '@grafana/data';
+import { DataSourceWithBackend, setTemplateSrv } from '@grafana/runtime';
+import { lastValueFrom, of } from 'rxjs';
 import { BugsinkDataSource } from './datasource';
 import { BugsinkOptions, DEFAULT_QUERY } from './types';
 
@@ -73,6 +81,41 @@ describe('BugsinkDataSource', () => {
     await ds.getIssue('a/b');
 
     expect(getResource).toHaveBeenCalledWith('issues/a%2Fb', undefined, { showErrorAlert: false });
+  });
+
+  describe('query', () => {
+    afterEach(() => jest.restoreAllMocks());
+
+    it('gives link time ranges to the frames the backend answers', async () => {
+      const frame = createDataFrame({
+        fields: [
+          {
+            name: 'trace_id',
+            type: FieldType.string,
+            values: ['abc'],
+            config: {
+              links: [
+                {
+                  title: 'Open trace',
+                  url: '',
+                  internal: {
+                    datasourceUid: 'tempo',
+                    query: {},
+                    timeRange: { from: '2026-11-15T09:45:00Z', to: '2026-11-15T10:20:00Z' },
+                  },
+                },
+              ] as unknown as DataLink[],
+            },
+          },
+        ],
+      });
+      jest.spyOn(DataSourceWithBackend.prototype, 'query').mockReturnValue(of({ data: [frame] }));
+
+      const response = await lastValueFrom(createDataSource().query({ targets: [] } as never));
+
+      const link = response.data[0].fields[0].config.links[0];
+      expect(link.internal.range.raw.from.valueOf()).toBe(Date.parse('2026-11-15T09:45:00Z'));
+    });
   });
 
   describe('listEvents', () => {

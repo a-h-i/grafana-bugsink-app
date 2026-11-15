@@ -49,6 +49,13 @@ describe('ExceptionChain', () => {
     );
   });
 
+  it('names an exception without a type', () => {
+    render(<ExceptionChain exceptions={[exception('', { value: 'boom' })]} platform="python" />);
+
+    expect(screen.getByRole('heading', { level: 4, name: 'Unknown exception' })).toBeInTheDocument();
+    expect(screen.getByText('boom')).toBeInTheDocument();
+  });
+
   it('shows the value of an exception as text', () => {
     render(
       <ExceptionChain exceptions={[exception('Boom', { value: '<img src=x onerror=alert(1)>' })]} platform="python" />

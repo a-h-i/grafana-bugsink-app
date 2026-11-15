@@ -84,7 +84,7 @@ func (d *Datasource) queryEvents(ctx context.Context, m queryModel, project int)
 		return failure(backend.StatusBadRequest, invalid)
 	}
 	if eq.namesNothing() {
-		frame := eventsFrame(nil, nil, d.browserURL, nil)
+		frame := eventsFrame(nil, nil, d.browserURL, nil, d.links)
 		frame.AppendNotices(data.Notice{Severity: data.NoticeSeverityInfo, Text: eventsNamesNothing})
 		return backend.DataResponse{Frames: data.Frames{frame}}
 	}
@@ -93,7 +93,7 @@ func (d *Datasource) queryEvents(ctx context.Context, m queryModel, project int)
 		message, status := userMessage(err)
 		return failure(status, message)
 	}
-	return backend.DataResponse{Frames: data.Frames{eventsFrame(res.rows, d.projectNames(ctx), d.browserURL, res.notices)}}
+	return backend.DataResponse{Frames: data.Frames{eventsFrame(res.rows, d.projectNames(ctx), d.browserURL, res.notices, d.links)}}
 }
 
 func failure(status backend.Status, message string) backend.DataResponse {

@@ -27,6 +27,20 @@ export const DEFAULT_QUERY: Partial<BugsinkQuery> = {
 
 export interface BugsinkOptions extends DataSourceJsonData {
   browserUrl?: string;
+  tempoDatasourceUid?: string;
+  lokiDatasourceUid?: string;
+  linkWindowMinutes?: number;
+  logsQuery?: string;
+  serviceTag?: string;
+}
+
+export interface ExploreLink {
+  title: string;
+  internal: {
+    datasourceUid: string;
+    query: Record<string, unknown>;
+    timeRange: { from: string; to: string };
+  };
 }
 
 export interface BugsinkSecureJsonData {
@@ -184,4 +198,5 @@ export interface EventDetail {
   stacktraceMd: string | null;
   notices: string[];
   bugsinkUrl: string;
+  links: ExploreLink[];
 }

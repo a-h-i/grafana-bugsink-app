@@ -127,9 +127,11 @@ var eventContractFields = []fieldSpec{
 	{"issue", "Issue", data.FieldTypeString},
 	{"project", "Project", data.FieldTypeString},
 	{"ingested_at", "Ingested at", data.FieldTypeTime},
+	{"trace_id", "Trace ID", data.FieldTypeString},
 	{"id", "", data.FieldTypeString},
 	{"issue_id", "", data.FieldTypeString},
 	{"project_id", "Project ID", data.FieldTypeInt64},
+	{"logs_query", "", data.FieldTypeString},
 }
 
 func TestEventsFrame(t *testing.T) {
@@ -139,7 +141,7 @@ func TestEventsFrame(t *testing.T) {
 		{event: bugsink.Event{ID: "e-1", EventID: "sdk-1", IssueID: "i-1", ProjectID: 1, Timestamp: ts, IngestedAt: ingested}, issue: "SAMPLE-1"},
 		{event: bugsink.Event{ID: "e-2", EventID: "sdk-2", IssueID: "i-2", ProjectID: 9, Timestamp: ts, IngestedAt: ingested}, issue: "SAMPLE-2"},
 	}
-	frame := eventsFrame(rows, map[int]string{1: "alpha"}, "http://b", []string{"first", "second"})
+	frame := eventsFrame(rows, map[int]string{1: "alpha"}, "http://b", []string{"first", "second"}, linkSettings{})
 
 	if frame.Name != "events" || frame.Meta == nil || frame.Meta.PreferredVisualization != data.VisTypeTable {
 		t.Fatalf("frame name %q meta %+v", frame.Name, frame.Meta)
@@ -165,8 +167,8 @@ func TestEventsFrame(t *testing.T) {
 	}
 
 	want := [][]any{
-		{ts, "sdk-1", "SAMPLE-1", "alpha", ingested, "e-1", "i-1", int64(1)},
-		{ts, "sdk-2", "SAMPLE-2", "9", ingested, "e-2", "i-2", int64(9)},
+		{ts, "sdk-1", "SAMPLE-1", "alpha", ingested, "", "e-1", "i-1", int64(1), ""},
+		{ts, "sdk-2", "SAMPLE-2", "9", ingested, "", "e-2", "i-2", int64(9), ""},
 	}
 	for i, w := range want {
 		got := make([]any, len(frame.Fields))
@@ -186,7 +188,7 @@ func TestEventsFrame(t *testing.T) {
 }
 
 func TestEventsFrameEmpty(t *testing.T) {
-	frame := eventsFrame(nil, nil, "http://b", nil)
+	frame := eventsFrame(nil, nil, "http://b", nil, linkSettings{})
 	if len(frame.Fields) != len(eventContractFields) {
 		t.Fatalf("%d fields, want %d", len(frame.Fields), len(eventContractFields))
 	}
@@ -194,5 +196,76 @@ func TestEventsFrameEmpty(t *testing.T) {
 		if f.Len() != 0 || f.Type() != eventContractFields[i].typ {
 			t.Errorf("field %q has %d rows of %v", f.Name, f.Len(), f.Type())
 		}
+	}
+}
+
+func linkRow(project int, issue, trace string, ts time.Time) eventRow {
+	return eventRow{event: bugsink.Event{ProjectID: project, Timestamp: ts}, issue: issue, traceID: trace}
+}
+
+func traceLinks(t *testing.T, frame *data.Frame) []data.DataLink {
+	t.Helper()
+	for _, f := range frame.Fields {
+		if f.Name == "trace_id" {
+			return f.Config.Links
+		}
+	}
+	t.Fatal("no trace_id field")
+	return nil
+}
+
+func TestEventsFrameLinks(t *testing.T) {
+	names := map[int]string{1: "sample-python", 2: "sample-js"}
+	both := linkSettings{tempoUID: "tempo", lokiUID: "loki", window: 15 * time.Minute, logsQuery: defaultLogsQuery, serviceTag: defaultServiceTag}
+	t10 := time.Date(2026, 11, 15, 10, 0, 0, 0, time.UTC)
+	t1005 := t10.Add(5 * time.Minute)
+	const trace = "0123456789abcdef0123456789abcdef"
+	rows := []eventRow{linkRow(1, "A-1", trace, t10), linkRow(2, "B-1", trace, t1005)}
+	frame := eventsFrame(rows, names, "http://b", nil, both)
+
+	traceField := frame.Fields[5]
+	if traceField.Name != "trace_id" || traceField.Config.DisplayNameFromDS != "Trace ID" {
+		t.Fatalf("field 5 %q %+v", traceField.Name, traceField.Config)
+	}
+	logs := frame.Fields[9]
+	if logs.Name != "logs_query" || logs.Config.Custom["hidden"] != true {
+		t.Fatalf("field 9 %q %+v", logs.Name, logs.Config)
+	}
+	if got := stringColumn(t, frame, "trace_id"); !reflect.DeepEqual(got, []string{trace, trace}) {
+		t.Fatalf("trace ids %v", got)
+	}
+	wantQueries := []string{`{service_name="sample-python"} | trace_id="` + trace + `"`, `{service_name="sample-js"} | trace_id="` + trace + `"`}
+	if got := stringColumn(t, frame, "logs_query"); !reflect.DeepEqual(got, wantQueries) {
+		t.Fatalf("logs queries %v", got)
+	}
+	want := both.exploreLinks("${__value.raw}", "${__data.fields.logs_query}",
+		time.Date(2026, 11, 15, 9, 45, 0, 0, time.UTC), time.Date(2026, 11, 15, 10, 20, 0, 0, time.UTC))
+	if got := traceLinks(t, frame); len(want) != 2 || !reflect.DeepEqual(got, want) {
+		t.Fatalf("links %+v, want %+v", got, want)
+	}
+
+	for name, c := range map[string]struct {
+		rows     []eventRow
+		settings linkSettings
+	}{
+		"one row without a trace id":        {[]eventRow{linkRow(1, "A-1", trace, t10), linkRow(1, "A-1", "", t10)}, both},
+		"one row with a malformed trace id": {[]eventRow{linkRow(1, "A-1", trace, t10), linkRow(1, "A-1", "${__user.login}", t10)}, both},
+		"no rows":                           {nil, both},
+		"no uids":                           {rows, linkSettings{window: time.Minute, logsQuery: defaultLogsQuery}},
+	} {
+		if got := traceLinks(t, eventsFrame(c.rows, names, "http://b", nil, c.settings)); len(got) != 0 {
+			t.Errorf("%s: links %+v", name, got)
+		}
+	}
+}
+
+func TestEventsFrameMalformedTraceIDHasNoLogsQuery(t *testing.T) {
+	both := linkSettings{tempoUID: "tempo", lokiUID: "loki", window: time.Minute, logsQuery: defaultLogsQuery}
+	frame := eventsFrame([]eventRow{linkRow(1, "A-1", "${__user.login}", time.Now())}, map[int]string{1: "p"}, "http://b", nil, both)
+	if got := stringColumn(t, frame, "logs_query"); !reflect.DeepEqual(got, []string{""}) {
+		t.Fatalf("logs queries %v", got)
+	}
+	if got := stringColumn(t, frame, "trace_id"); !reflect.DeepEqual(got, []string{"${__user.login}"}) {
+		t.Fatalf("trace ids %v", got)
 	}
 }

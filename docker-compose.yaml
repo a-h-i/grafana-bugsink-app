@@ -135,6 +135,29 @@ services:
       retries: 30
       start_period: 10s
 
+  sample-js:
+    build: ./sample-apps/javascript
+    environment:
+      SENTRY_DSN: http://22222222222222222222222222222222@bugsink:8000/2
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+    ports:
+      - "127.0.0.1:${SAMPLE_JS_PORT:-8820}:8000"
+    depends_on:
+      bugsink-seed:
+        condition: service_completed_successfully
+      otel-collector:
+        condition: service_started
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://localhost:8000/healthz', { signal: AbortSignal.timeout(3000) }).then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
+
 volumes:
   postgres-data:
   tempo-data:

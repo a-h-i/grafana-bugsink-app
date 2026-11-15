@@ -88,7 +88,7 @@ export function ExceptionChain({
         <React.Fragment key={i}>
           {i > 0 && <p className={styles.separator}>{chainSeparator(platform)}</p>}
           <div className={styles.exception}>
-            <h4>{exception.type}</h4>
+            <h4>{exception.type || 'Unknown exception'}</h4>
             <p className={styles.value}>{exception.value}</p>
             {exception.handled === false && <Badge color="red" text="Unhandled" />}
             <Frames frames={exception.frames} />

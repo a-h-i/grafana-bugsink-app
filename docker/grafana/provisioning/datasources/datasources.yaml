@@ -20,6 +20,8 @@ datasources:
     url: http://bugsink:8000
     jsonData:
       browserUrl: http://localhost:8800
+      tempoDatasourceUid: tempo
+      lokiDatasourceUid: loki
     secureJsonData:
       # Public development-only token from docker/bugsink/seed.py.
       apiToken: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa

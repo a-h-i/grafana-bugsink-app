@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"math"
+	"net/http"
 	"sort"
 	"time"
 	"unicode/utf8"
@@ -83,6 +84,11 @@ func (c *Client) GetEvent(ctx context.Context, id uuid.UUID) (EventDetail, error
 	if err != nil {
 		return EventDetail{}, err
 	}
+	return decodeEventDetail(resp)
+}
+
+// decodeEventDetail reads an event answer and parses its payload.
+func decodeEventDetail(resp *http.Response) (EventDetail, error) {
 	var body eventBody
 	if err := decodeJSON(resp, &body); err != nil {
 		return EventDetail{}, err
@@ -395,6 +401,9 @@ const maxEpochSeconds = 253402300799
 func (p *parser) timestamp(raw json.RawMessage) *time.Time {
 	if s, ok := decode[string](raw); ok {
 		t, err := time.Parse(time.RFC3339Nano, s)
+		if err != nil {
+			t, err = time.Parse("2006-01-02T15:04:05.999999999", s)
+		}
 		if err != nil {
 			return nil
 		}

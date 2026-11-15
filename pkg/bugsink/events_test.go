@@ -104,3 +104,20 @@ func TestLookupEvent(t *testing.T) {
 		t.Fatalf("error = %v", err)
 	}
 }
+
+func TestLookupEventParsesPayload(t *testing.T) {
+	body := fixtureBytes(t, "python-handled")
+	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write(body) })
+	e, err := c.LookupEvent(context.Background(), 1, uuid.MustParse(sdkUUID))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := getFixture(t, "python-handled")
+	if e.TraceID == "" || len(e.Tags) == 0 || e.Environment == "" {
+		t.Fatalf("detail = %+v", e)
+	}
+	if e.TraceID != want.TraceID || e.Environment != want.Environment || !reflect.DeepEqual(e.Tags, want.Tags) ||
+		!reflect.DeepEqual(e.Event, want.Event) {
+		t.Fatalf("lookup %+v differs from get %+v", e, want)
+	}
+}

@@ -137,18 +137,23 @@ normalised event through `GET events/{id}`.
 
 ### M6: Trace & log links
 
-* **Scope:** config editor fields for the Tempo and Loki data sources, time window, LogQL template and
-  `${service}` source; internal data links on event frames; **Open trace** and **Open logs** buttons on
-  the event detail, hidden when there is no `trace_id` or no target, and shown without checking Tempo;
-  a test of `setup_propagator=False` in the Python sample app; the JavaScript sample app, as the
-  second SDK to verify against; documentation of the SDK trace-context prerequisite and of the reverse
-  link from a Tempo trace to its Bugsink events (trace, issue, events; findings Q7); the documentation
-  also covers the ASGI middleware order, events whose trace Tempo does not have, and `traceparent`
-  propagation (findings Q1 and other findings).
+Built; see [`plans/m6-trace-log-links.md`](plans/m6-trace-log-links.md). Links open Explore in the same tab.
+
+* **Scope:** config editor fields for the Tempo and Loki data sources, time window, logs query and
+  service tag; `trace_id` and `logs_query` fields on event frames, with internal data links on `trace_id`
+  for a `trace:<id>` or event id query (an issue-only query has none); **Open trace**, **Open logs** and
+  **Open event in Bugsink** on the event detail, the first two hidden when the trace id is not 32
+  lowercase hexadecimal characters or there is no target, and shown without checking Tempo; the Python
+  sample app with `setup_propagator=False`; the JavaScript sample app, a Node server on port 8820, as the
+  second SDK; documentation of the SDK trace-context prerequisite, the reverse link from a Tempo trace
+  to its Bugsink events, events whose trace Tempo does not have, `traceparent` propagation and the
+  logs query rules; the M5 leftovers (message with exceptions, `Unknown exception`).
 * **Demo:** trigger an error in each sample app, open the event, land on the right trace in Tempo and on
-  the matching log lines in Loki; an event without a `trace_id` shows no buttons; the sample app's
-  `/no-trace` event (a trace id Tempo does not have) shows the buttons and Tempo reports the trace as
-  not found; a request with a `traceparent` header keeps its trace id with the documented setup.
+  the matching log lines in Loki; a dashboard row of the provisioned `Bugsink trace` dashboard links to
+  the trace's logs; the message captured in a new thread (a trace id Tempo does not have) shows the
+  buttons and Tempo reports the trace as not found; a request with a `traceparent` header keeps its
+  trace id with the documented setup; the data source without targets shows no buttons. An event
+  with no trace id shows no buttons in unit tests only, because neither SDK sends such an event.
 
 ### M7: Basic triage
 
@@ -213,14 +218,15 @@ M7 to M10 following as minor versions.
 * From M1 on: the SPDX identifier goes in `package.json`, and source files carry an
   `SPDX-License-Identifier: GPL-3.0-or-later` header.
 * Dependencies must have GPLv3-compatible licenses. The Grafana SDKs and UI packages are Apache-2.0,
-  which is compatible. M1 adds a dependency license check to CI.
+  which is compatible. M1 adds a dependency license check to CI. The check covers what the plugin ships;
+  the dev-stack sample apps are outside it.
 * Bugsink's OpenAPI schema is committed under Bugsink's own license, not the GPL: it lives in its own
   directory with a notice naming its source, version and license.
 
 ## Open decisions
 
-Eight of the nine decisions were made on 2026-11-15 and are in the milestones above; spec §10 lists them. Among them: the client generated from Bugsink's PolyForm Shield schema ships without asking for permission (risk accepted by the owner).
+All nine decisions are made on 2026-11-15 and are in the milestones above; spec §10 lists them. Among them: the client generated from Bugsink's PolyForm Shield schema ships without asking for permission (risk accepted by the owner).
 
 | Decision | Needed by | Notes |
 | :--- | :--- | :--- |
-| `traceparent` propagation with the OTLP integration | M6 | Settled by a test of `setup_propagator=False` in M6. Spec §10. |
+| `traceparent` propagation with the OTLP integration | M6 | Settled: `setup_propagator=False` keeps an incoming `traceparent`. Spec §10. |

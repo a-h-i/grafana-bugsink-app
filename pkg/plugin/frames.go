@@ -78,12 +78,13 @@ func issuesFrame(issues []bugsink.Issue, projectNames map[int]string, browserURL
 }
 
 // eventsFrame builds the events frame of the frame contract, with each notice as a warning.
-func eventsFrame(rows []eventRow, projectNames map[int]string, browserURL string, notices []string) *data.Frame {
+func eventsFrame(rows []eventRow, projectNames map[int]string, browserURL string, notices []string, links linkSettings) *data.Frame {
 	var (
-		eventID, issue, project, id, issueID []string
-		timestamp, ingestedAt                []time.Time
-		projectID                            []int64
+		eventID, issue, project, id, issueID, traceID, logsQuery []string
+		timestamp, ingestedAt                                    []time.Time
+		projectID                                                []int64
 	)
+	allTraced := len(rows) > 0
 	for _, r := range rows {
 		e := r.event
 		name, ok := projectNames[e.ProjectID]
@@ -98,6 +99,9 @@ func eventsFrame(rows []eventRow, projectNames map[int]string, browserURL string
 		id = append(id, e.ID)
 		issueID = append(issueID, e.IssueID)
 		projectID = append(projectID, int64(e.ProjectID))
+		traceID = append(traceID, r.traceID)
+		logsQuery = append(logsQuery, rowLogsQuery(r, name, links))
+		allTraced = allTraced && traceIDPattern.MatchString(r.traceID)
 	}
 
 	eventIDField := field("event_id", "Event ID", orEmpty(eventID))
@@ -106,21 +110,46 @@ func eventsFrame(rows []eventRow, projectNames map[int]string, browserURL string
 		URL:         browserURL + "/issues/issue/${__data.fields.issue_id}/event/${__data.fields.id}/",
 		TargetBlank: true,
 	}}
+	traceField := field("trace_id", "Trace ID", orEmpty(traceID))
+	if allTraced {
+		from, to := timestamp[0], timestamp[0]
+		for _, ts := range timestamp {
+			if ts.Before(from) {
+				from = ts
+			}
+			if ts.After(to) {
+				to = ts
+			}
+		}
+		traceField.Config.Links = links.exploreLinks("${__value.raw}", "${__data.fields.logs_query}", from.Add(-links.window), to.Add(links.window))
+	}
+	logsField := field("logs_query", "", orEmpty(logsQuery))
+	logsField.Config.Custom = map[string]any{"hidden": true}
 	frame := data.NewFrame("events",
 		field("timestamp", "Timestamp", orEmpty(timestamp)),
 		eventIDField,
 		field("issue", "Issue", orEmpty(issue)),
 		field("project", "Project", orEmpty(project)),
 		field("ingested_at", "Ingested at", orEmpty(ingestedAt)),
+		traceField,
 		data.NewField("id", nil, orEmpty(id)),
 		data.NewField("issue_id", nil, orEmpty(issueID)),
 		field("project_id", "Project ID", orEmpty(projectID)),
+		logsField,
 	)
 	frame.Meta = &data.FrameMeta{PreferredVisualization: data.VisTypeTable}
 	for _, text := range notices {
 		frame.AppendNotices(data.Notice{Severity: data.NoticeSeverityWarning, Text: text})
 	}
 	return frame
+}
+
+// rowLogsQuery renders the logs query of a row, or "" when the row has no linkable trace id.
+func rowLogsQuery(r eventRow, project string, links linkSettings) string {
+	if !traceIDPattern.MatchString(r.traceID) {
+		return ""
+	}
+	return renderLogsQuery(links.logsQuery, links.vars(r.traceID, project, r.detail))
 }
 
 func field[T any](name, display string, values []T) *data.Field {
