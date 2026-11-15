@@ -2,7 +2,7 @@
 import React from 'react';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
-import { EventRow, IssueDetail } from '../datasource/types';
+import { EventDetail, EventRow, IssueDetail } from '../datasource/types';
 import { IssuePage } from './IssuePage';
 
 const mockGetList = jest.fn();
@@ -12,6 +12,7 @@ type MockSource = {
   getIssueTags: jest.Mock;
   getIssueHistory: jest.Mock;
   listEvents: jest.Mock;
+  getEvent: jest.Mock;
 };
 const mockSources: Record<string, MockSource> = {};
 
@@ -58,9 +59,14 @@ const ISSUE: IssueDetail = {
   bugsinkUrl: 'http://localhost:8800/issues/issue/uuid-1/event/last/',
 };
 
-const TAGS = { tags: [{ key: 'environment', values: [{ value: 'development', count: 26 }], otherValues: 0 }], truncated: false };
+const TAGS = {
+  tags: [{ key: 'environment', values: [{ value: 'development', count: 26 }], otherValues: 0 }],
+  truncated: false,
+};
 const HISTORY = {
-  history: [{ id: 1, kind: 'manual_annotation', timestamp: '2026-11-15T05:45:33Z', user: null, comment: 'm4 plan probe' }],
+  history: [
+    { id: 1, kind: 'manual_annotation', timestamp: '2026-11-15T05:45:33Z', user: null, comment: 'm4 plan probe' },
+  ],
   truncated: false,
 };
 const EVENT: EventRow = {
@@ -74,7 +80,49 @@ const EVENT: EventRow = {
   ingestedAt: Date.UTC(2026, 10, 15, 5, 45, 40),
   url: 'http://localhost:8800/issues/issue/uuid-1/event/e1/',
 };
+const EVENT_2: EventRow = { ...EVENT, id: 'e2', eventId: 'aaaaaaaa-0000-0000-0000-000000000002' };
 const PENDING = () => new Promise(() => {});
+
+function eventDetail(id: string, overrides: Partial<EventDetail> = {}): EventDetail {
+  return {
+    id,
+    eventId: `sdk-${id}`,
+    issueId: 'uuid-1',
+    projectId: 1,
+    project: 'sample-python',
+    timestamp: '2026-11-15T07:52:59.387Z',
+    ingestedAt: '2026-11-15T07:53:00Z',
+    platform: 'python',
+    level: 'error',
+    message: '',
+    transaction: '',
+    environment: '',
+    release: '',
+    traceId: '',
+    tags: [],
+    contexts: [],
+    exceptions: [],
+    breadcrumbs: [],
+    stacktraceMd: null,
+    notices: [],
+    bugsinkUrl: `http://bugsink/${id}`,
+    ...overrides,
+  };
+}
+
+function frame(inApp: boolean, name: string) {
+  return {
+    filename: `${name}.py`,
+    function: name,
+    module: '',
+    lineno: 1,
+    colno: null,
+    inApp,
+    preContext: [],
+    contextLine: null,
+    postContext: [],
+  };
+}
 
 function newSource(): MockSource {
   return {
@@ -82,6 +130,7 @@ function newSource(): MockSource {
     getIssueTags: jest.fn().mockResolvedValue(TAGS),
     getIssueHistory: jest.fn().mockResolvedValue(HISTORY),
     listEvents: jest.fn().mockResolvedValue({ rows: [EVENT], notices: [] }),
+    getEvent: jest.fn((id: string) => Promise.resolve(eventDetail(id))),
   };
 }
 
@@ -177,7 +226,8 @@ describe('IssuePage', () => {
 
     expect(await screen.findByText('development (26)')).toBeInTheDocument();
     expect(screen.getByText('m4 plan probe')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: EVENT.eventId })).toBeInTheDocument();
+    expect(await screen.findByRole('link', { name: `Open event ${EVENT.eventId} in Bugsink` })).toBeInTheDocument();
+    expect(screen.getByText(EVENT.eventId)).toBeInTheDocument();
     expect(mockSources.eu.getIssueTags).toHaveBeenCalledWith('X-1');
     expect(mockSources.eu.getIssueHistory).toHaveBeenCalledWith('X-1');
     expect(mockSources.eu.listEvents).toHaveBeenCalledWith({ queryType: 'events', issue: 'X-1' });
@@ -190,6 +240,7 @@ describe('IssuePage', () => {
       getIssueTags: jest.fn(PENDING),
       getIssueHistory: jest.fn(PENDING),
       listEvents: jest.fn(PENDING),
+      getEvent: jest.fn(PENDING),
     });
 
     renderPage('/a/ahmedismail-bugsink-app/issues/X-1?ds=bugsink');
@@ -301,5 +352,174 @@ describe('IssuePage', () => {
     renderPage('/a/ahmedismail-bugsink-app/issues/X-1');
 
     expect(screen.getByText('No Bugsink data source yet.')).toBeInTheDocument();
+  });
+
+  describe('Event section', () => {
+    const PATH = '/a/ahmedismail-bugsink-app/issues/X-1';
+
+    function twoEvents() {
+      mockSources.bugsink.listEvents.mockResolvedValue({ rows: [EVENT, EVENT_2], notices: [] });
+    }
+
+    it('reads the newest event once the list is in, between the summary and the events', async () => {
+      twoEvents();
+
+      renderPage(`${PATH}?ds=bugsink`);
+
+      expect(await screen.findByText('sdk-e1')).toBeInTheDocument();
+      expect(mockSources.bugsink.getEvent).toHaveBeenCalledTimes(1);
+      expect(mockSources.bugsink.getEvent).toHaveBeenCalledWith('e1');
+      const summary = screen.getByRole('heading', { name: 'LookupError: failure' });
+      const event = screen.getByRole('heading', { name: 'Event' });
+      const events = screen.getByRole('heading', { name: 'Events' });
+      expect(summary.compareDocumentPosition(event) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(event.compareDocumentPosition(events) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+
+    it('reads the event of the address without waiting for the list', async () => {
+      mockSources.bugsink.listEvents.mockReturnValue(PENDING());
+
+      renderPage(`${PATH}?ds=bugsink&event=e2`);
+
+      expect(await screen.findByText('sdk-e2')).toBeInTheDocument();
+      expect(mockSources.bugsink.getEvent).toHaveBeenCalledWith('e2');
+    });
+
+    it('shows another event when its id is clicked and puts it in the address', async () => {
+      twoEvents();
+      renderPage(`${PATH}?orgId=1&kiosk&ds=bugsink`);
+      await screen.findByText('sdk-e1');
+
+      fireEvent.click(screen.getByRole('link', { name: EVENT_2.eventId }));
+
+      expect(await screen.findByText('sdk-e2')).toBeInTheDocument();
+      expect(mockSources.bugsink.getEvent).toHaveBeenCalledWith('e2');
+      expect(screen.getByTestId('location')).toHaveTextContent(`${PATH}?orgId=1&kiosk&ds=bugsink&event=e2`);
+      expect(screen.queryByText('sdk-e1')).not.toBeInTheDocument();
+    });
+
+    it('shows the event clicked last when the first answer arrives late', async () => {
+      twoEvents();
+      let resolveFirst: (event: EventDetail) => void = () => {};
+      mockSources.bugsink.getEvent.mockImplementation((id: string) =>
+        id === 'e1' ? new Promise<EventDetail>((resolve) => (resolveFirst = resolve)) : Promise.resolve(eventDetail(id))
+      );
+      renderPage(`${PATH}?ds=bugsink`);
+      fireEvent.click(await screen.findByRole('link', { name: EVENT_2.eventId }));
+      expect(await screen.findByText('sdk-e2')).toBeInTheDocument();
+
+      await act(async () => resolveFirst(eventDetail('e1')));
+
+      expect(screen.getByText('sdk-e2')).toBeInTheDocument();
+      expect(screen.queryByText('sdk-e1')).not.toBeInTheDocument();
+    });
+
+    it('shows a refused event id under Event while the other sections render', async () => {
+      mockSources.bugsink.getEvent.mockRejectedValue({ data: { message: '"nosuch" is not an event id.' } });
+
+      renderPage(`${PATH}?ds=bugsink&event=nosuch`);
+
+      const section = (await screen.findByRole('heading', { name: 'Event' })).closest('section')!;
+      expect(await within(section).findByText('"nosuch" is not an event id.')).toBeInTheDocument();
+      expect(await screen.findByText('development (26)')).toBeInTheDocument();
+      expect(screen.getByText('m4 plan probe')).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: 'Events' })).toBeInTheDocument();
+    });
+
+    it('shows that an event of another issue belongs to another issue', async () => {
+      mockSources.bugsink.getEvent.mockResolvedValue(eventDetail('e2', { issueId: 'other' }));
+
+      renderPage(`${PATH}?ds=bugsink&event=e2`);
+
+      const section = (await screen.findByRole('heading', { name: 'Event' })).closest('section')!;
+      expect(await within(section).findByText('This event belongs to another issue.')).toBeInTheDocument();
+      expect(screen.queryByText('sdk-e2')).not.toBeInTheDocument();
+      expect(await screen.findByText('development (26)')).toBeInTheDocument();
+      expect(screen.getByText('m4 plan probe')).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: 'Events' })).toBeInTheDocument();
+    });
+
+    it('shows a loading text while the event is pending', async () => {
+      mockSources.bugsink.getEvent.mockReturnValue(PENDING());
+
+      renderPage(`${PATH}?ds=bugsink`);
+
+      expect(await screen.findByText('Loading event...')).toBeInTheDocument();
+    });
+
+    it('has no Event section when the issue has no events', async () => {
+      mockSources.bugsink.listEvents.mockResolvedValue({ rows: [], notices: [] });
+
+      renderPage(`${PATH}?ds=bugsink`);
+
+      expect(await screen.findByText('No stored events.')).toBeInTheDocument();
+      expect(screen.queryByRole('heading', { name: 'Event' })).not.toBeInTheDocument();
+      expect(mockSources.bugsink.getEvent).not.toHaveBeenCalled();
+    });
+
+    it('shows the notices of the event as warnings', async () => {
+      mockSources.bugsink.getEvent.mockResolvedValue(
+        eventDetail('e1', { notices: ['Only the 250 frames nearest the error are shown for RuntimeError.'] })
+      );
+
+      renderPage(`${PATH}?ds=bugsink`);
+
+      const section = (await screen.findByRole('heading', { name: 'Event' })).closest('section')!;
+      expect(
+        await within(section).findByText('Only the 250 frames nearest the error are shown for RuntimeError.')
+      ).toBeInTheDocument();
+    });
+
+    it('does not keep a fold open on the next event', async () => {
+      twoEvents();
+      const exceptions = [
+        {
+          type: 'RuntimeError',
+          value: 'boom',
+          module: '',
+          mechanism: '',
+          handled: true,
+          frames: [frame(false, 'lib_a'), frame(false, 'lib_b'), frame(true, 'app')],
+          framesOmitted: 0,
+        },
+      ];
+      mockSources.bugsink.getEvent.mockImplementation((id: string) => Promise.resolve(eventDetail(id, { exceptions })));
+      renderPage(`${PATH}?ds=bugsink`);
+      fireEvent.click(await screen.findByText('2 other frames'));
+      expect(screen.getByText(/lib_a/)).toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole('link', { name: EVENT_2.eventId }));
+
+      expect(await screen.findByText('2 other frames')).toBeInTheDocument();
+      expect(screen.queryByText(/lib_a/)).not.toBeInTheDocument();
+    });
+
+    it('goes back to the list without the event and with the other parameters as written', async () => {
+      renderPage(`${PATH}?orgId=1&kiosk&ds=eu&event=e2`);
+      await screen.findByText('sdk-e2');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Back to issues' }));
+
+      expect(screen.getByTestId('location')).toHaveTextContent('/a/ahmedismail-bugsink-app?orgId=1&kiosk&ds=eu');
+      expect(screen.getByTestId('location')).not.toHaveTextContent('event=');
+    });
+
+    it('refresh reads the event again', async () => {
+      renderPage(`${PATH}?ds=bugsink`);
+      await screen.findByText('sdk-e1');
+
+      await act(async () => fireEvent.click(screen.getByTestId('data-testid RefreshPicker run button')));
+
+      await waitFor(() => expect(mockSources.bugsink.getEvent).toHaveBeenCalledTimes(2));
+    });
+
+    it('shows no section for an unknown data source', async () => {
+      renderPage(`${PATH}?ds=nosuch`);
+
+      expect(await screen.findByText('The data source "nosuch" was not found.')).toBeInTheDocument();
+      for (const name of ['Tags', 'History', 'Events', 'Event']) {
+        expect(screen.queryByRole('heading', { name })).not.toBeInTheDocument();
+      }
+    });
   });
 });

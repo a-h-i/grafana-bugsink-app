@@ -120,3 +120,68 @@ export interface IssueHistory {
   history: HistoryEntry[];
   truncated: boolean;
 }
+
+export interface KeyValue {
+  key: string;
+  value: string;
+}
+
+export interface StackFrame {
+  filename: string;
+  function: string;
+  module: string;
+  lineno: number | null;
+  colno: number | null;
+  inApp: boolean;
+  preContext: string[];
+  contextLine: string | null;
+  postContext: string[];
+}
+
+export interface EventException {
+  type: string;
+  value: string;
+  module: string;
+  mechanism: string;
+  handled: boolean | null;
+  frames: StackFrame[];
+  framesOmitted: number;
+}
+
+export interface Breadcrumb {
+  timestamp: string | null;
+  type: string;
+  category: string;
+  level: string;
+  message: string;
+  data: KeyValue[];
+}
+
+export interface EventContext {
+  name: string;
+  fields: KeyValue[];
+}
+
+export interface EventDetail {
+  id: string;
+  eventId: string;
+  issueId: string;
+  projectId: number;
+  project: string;
+  timestamp: string;
+  ingestedAt: string;
+  platform: string;
+  level: string;
+  message: string;
+  transaction: string;
+  environment: string;
+  release: string;
+  traceId: string;
+  tags: KeyValue[];
+  contexts: EventContext[];
+  exceptions: EventException[];
+  breadcrumbs: Breadcrumb[];
+  stacktraceMd: string | null;
+  notices: string[];
+  bugsinkUrl: string;
+}

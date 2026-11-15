@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import { expect, test } from '@grafana/plugin-e2e';
 import { TRACE_MARKER } from './seeded';
-import { readTrace } from './trace-event';
+import { readReported } from './reported';
 
 function dashed(hex: string) {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
@@ -9,7 +9,7 @@ function dashed(hex: string) {
 
 test.describe('events', () => {
   test('issues and events of one trace', async ({ gotoDashboardPage, readProvisionedDashboard }) => {
-    const { traceId, eventId } = readTrace();
+    const { traceId, eventId } = readReported<{ traceId: string; eventId: string }>('trace');
     const dashboard = await readProvisionedDashboard({ fileName: 'bugsink-trace.json' });
     const dashboardPage = await gotoDashboardPage({
       uid: dashboard.uid,
@@ -26,7 +26,7 @@ test.describe('events', () => {
   });
 
   test('look up an event by its ID in Explore', async ({ explorePage, page, selectors }) => {
-    const { eventId } = readTrace();
+    const { eventId } = readReported<{ eventId: string }>('trace');
     await explorePage.getByGrafanaSelector(selectors.components.DataSourcePicker.inputV2).fill('Bugsink');
     await page.getByRole('option', { name: 'Bugsink', exact: true }).click();
     await explorePage.timeRange.set({ from: 'now-24h', to: 'now' });

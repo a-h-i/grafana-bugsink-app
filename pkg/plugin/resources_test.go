@@ -6,12 +6,16 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"reflect"
 	"sort"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
+	"github.com/a-h-i/grafana-bugsink-app/pkg/bugsink"
 	"github.com/grafana/grafana-plugin-sdk-go/backend"
 )
 
@@ -382,4 +386,217 @@ func TestProjectsResourceCache(t *testing.T) {
 	if f.projectCalls != 1 {
 		t.Fatalf("%d project requests, want 1", f.projectCalls)
 	}
+}
+
+func eventFixture(t *testing.T, name string) (id, body string) {
+	t.Helper()
+	raw, err := os.ReadFile(filepath.Join("..", "bugsink", "testdata", "events", name+".json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var head struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(raw, &head); err != nil {
+		t.Fatal(err)
+	}
+	return head.ID, string(raw)
+}
+
+func eventResource(t *testing.T, fixture string) (resourceReply, map[string]any) {
+	t.Helper()
+	f := newFakeBugsink(t)
+	id, body := eventFixture(t, fixture)
+	f.eventDetails = map[string]string{id: body}
+	r := callResource(t, resourceDatasource(t, f), "GET", "events/"+id)
+	if r.status != 200 {
+		t.Fatalf("status %d body %s", r.status, r.body)
+	}
+	var got map[string]any
+	if err := json.Unmarshal([]byte(r.body), &got); err != nil {
+		t.Fatal(err)
+	}
+	return r, got
+}
+
+func TestEventResource(t *testing.T) {
+	_, body := eventResource(t, "python-unhandled")
+	var keys []string
+	for k := range body {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	wantKeys := []string{"breadcrumbs", "bugsinkUrl", "contexts", "environment", "eventId", "exceptions", "id",
+		"ingestedAt", "issueId", "level", "message", "notices", "platform", "project", "projectId", "release",
+		"stacktraceMd", "tags", "timestamp", "traceId", "transaction"}
+	if !reflect.DeepEqual(keys, wantKeys) {
+		t.Fatalf("keys %v, want %v", keys, wantKeys)
+	}
+	issue := "5f2241c0-3705-4514-975f-a53ff7c3a899"
+	id := "7b5d5499-1cf8-4734-8381-14cfb03da60e"
+	want := map[string]any{
+		"project": "alpha", "id": id, "issueId": issue, "stacktraceMd": nil,
+		"bugsinkUrl": "http://localhost:8800/issues/issue/" + issue + "/event/" + id + "/",
+	}
+	for k, v := range want {
+		if body[k] != v {
+			t.Errorf("%s = %v, want %v", k, body[k], v)
+		}
+	}
+	exceptions := body["exceptions"].([]any)
+	frames := exceptions[0].(map[string]any)["frames"].([]any)
+	frame := frames[0].(map[string]any)
+	if _, ok := frame["lineno"].(float64); !ok || frame["colno"] != nil {
+		t.Errorf("frame lineno/colno = %v/%v", frame["lineno"], frame["colno"])
+	}
+	if notices, ok := body["notices"].([]any); !ok || len(notices) != 0 {
+		t.Errorf("notices = %v", body["notices"])
+	}
+	exception := exceptions[0].(map[string]any)
+	assertKeys(t, "exception", exception, "type", "value", "module", "mechanism", "handled", "frames", "framesOmitted")
+	if exception["handled"] != false {
+		t.Errorf("handled = %v", exception["handled"])
+	}
+	assertKeys(t, "frame", frame, "filename", "function", "module", "lineno", "colno", "inApp", "preContext", "contextLine", "postContext")
+	if frame["inApp"] != false || frames[len(frames)-1].(map[string]any)["inApp"] != true {
+		t.Errorf("inApp first %v last %v", frame["inApp"], frames[len(frames)-1].(map[string]any)["inApp"])
+	}
+	crumb := body["breadcrumbs"].([]any)[0].(map[string]any)
+	assertKeys(t, "breadcrumb", crumb, "timestamp", "type", "category", "level", "message", "data")
+	if ts, ok := crumb["timestamp"].(string); !ok {
+		t.Errorf("timestamp = %v", crumb["timestamp"])
+	} else if _, err := time.Parse(time.RFC3339Nano, ts); err != nil {
+		t.Errorf("timestamp %q: %v", ts, err)
+	}
+	assertKeys(t, "context", body["contexts"].([]any)[0].(map[string]any), "name", "fields")
+	assertKeys(t, "tag", body["tags"].([]any)[0].(map[string]any), "key", "value")
+}
+
+func assertKeys(t *testing.T, what string, m map[string]any, want ...string) {
+	t.Helper()
+	var got []string
+	for k := range m {
+		got = append(got, k)
+	}
+	sort.Strings(got)
+	sort.Strings(want)
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("%s keys %v, want %v", what, got, want)
+	}
+}
+
+func TestEventResourceEmptyLists(t *testing.T) {
+	r, body := eventResource(t, "message-only")
+	if body["project"] != "2" {
+		t.Errorf("project = %v", body["project"])
+	}
+	for _, key := range []string{"tags", "breadcrumbs", "contexts", "exceptions"} {
+		if list, ok := body[key].([]any); !ok || len(list) != 0 {
+			t.Errorf("%s = %v in %s", key, body[key], r.body)
+		}
+	}
+}
+
+func TestEventNotices(t *testing.T) {
+	e := bugsink.EventDetail{
+		Exceptions: []bugsink.Exception{
+			{Type: "ValueError", FramesOmitted: 3},
+			{Type: "KeyError"},
+			{Type: "OSError", FramesOmitted: 1},
+		},
+		ExceptionsCut: true, BreadcrumbsCut: true, EntriesCut: true, ValuesCut: true, StacktraceMDCut: true,
+	}
+	want := []string{
+		"Only the last 10 exceptions of the chain are shown.",
+		"Only the 250 frames nearest the error are shown for ValueError.",
+		"Only the 250 frames nearest the error are shown for OSError.",
+		"Only the newest 100 breadcrumbs are shown.",
+		"Only the first 200 tags, contexts or fields of each list are shown.",
+		"Values longer than 1024 characters are cut.",
+		"The stack trace text is cut at 100 KB.",
+	}
+	if got := eventNotices(e); !reflect.DeepEqual(got, want) {
+		t.Fatalf("got %q, want %q", got, want)
+	}
+	if got := eventNotices(bugsink.EventDetail{}); len(got) != 0 {
+		t.Fatalf("got %q for an event without cuts", got)
+	}
+}
+
+func TestEventRouteRejectsBadIDs(t *testing.T) {
+	cases := []struct {
+		path    string
+		status  int
+		message string
+	}{
+		{"events/nosuch", 400, `"nosuch" is not an event id.`},
+		{"events/X-1", 400, `"X-1" is not an event id.`},
+		{"events/..", 400, `".." is not an event id.`},
+		{"events/../projects", 400, `".." is not an event id.`},
+		{"events/", 400, `"" is not an event id.`},
+		{"events/urn:uuid:" + defaultEventID, 400, `"urn:uuid:` + defaultEventID + `" is not an event id.`},
+	}
+	for _, c := range cases {
+		t.Run(c.path, func(t *testing.T) {
+			f := newFakeBugsink(t)
+			r := callResource(t, resourceDatasource(t, f), "GET", c.path)
+			if r.status != c.status || messageOf(t, r) != c.message {
+				t.Fatalf("status %d body %s, want %d %s", r.status, r.body, c.status, c.message)
+			}
+			if n := f.requestCount(); n != 0 {
+				t.Fatalf("%d Bugsink requests", n)
+			}
+		})
+	}
+}
+
+func TestEventRouteErrors(t *testing.T) {
+	cases := []struct {
+		name    string
+		status  int
+		body    string
+		message string
+	}{
+		{"unknown event", 404, `{"detail":"No Event matches the given query."}`,
+			"Bugsink refused the request: No Event matches the given query."},
+		{"capability", 403, `{"detail":"This token does not have the required capability: events:read."}`,
+			"The API token lacks events:read."},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			f := newFakeBugsink(t)
+			f.eventStatus, f.eventError = c.status, c.body
+			r := callResource(t, resourceDatasource(t, f), "GET", "events/"+defaultEventID)
+			if r.status != 502 || messageOf(t, r) != c.message || strings.Contains(r.body, secretToken) {
+				t.Fatalf("status %d body %s", r.status, r.body)
+			}
+		})
+	}
+
+	t.Run("over the limit", func(t *testing.T) {
+		f := newFakeBugsink(t)
+		f.eventDetails = map[string]string{defaultEventID: `{"data":"` + strings.Repeat("x", 11<<20) + `"}`}
+		r := callResource(t, resourceDatasource(t, f), "GET", "events/"+defaultEventID)
+		if r.status != 502 || messageOf(t, r) != "The answer from Bugsink is larger than 10 MB." {
+			t.Fatalf("status %d body %.200s", r.status, r.body)
+		}
+	})
+
+	t.Run("method", func(t *testing.T) {
+		sender := &collectingSender{}
+		req := &backend.CallResourceRequest{Method: "POST", Path: "events/" + defaultEventID}
+		if err := newFakeBugsink(t).datasource(t).CallResource(context.Background(), req, sender); err != nil {
+			t.Fatal(err)
+		}
+		if sender.reply.status != 405 || sender.allow != "GET" {
+			t.Fatalf("status %d allow %q", sender.reply.status, sender.allow)
+		}
+	})
+
+	t.Run("settings", func(t *testing.T) {
+		r := callResource(t, newInstance(t, "", secretToken, ""), "GET", "events/"+defaultEventID)
+		if r.status != 400 || messageOf(t, r) != msgEnterURL {
+			t.Fatalf("status %d body %s", r.status, r.body)
+		}
+	})
 }

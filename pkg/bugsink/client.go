@@ -156,9 +156,12 @@ func decodeJSON(resp *http.Response, out any) error {
 	if resp.StatusCode/100 != 2 {
 		return readAPIError(resp)
 	}
-	body, err := io.ReadAll(io.LimitReader(resp.Body, maxBodyBytes))
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxBodyBytes+1))
 	if err != nil {
 		return err
+	}
+	if len(body) > maxBodyBytes {
+		return ErrTooLarge
 	}
 	if json.Unmarshal(body, out) != nil {
 		return fmt.Errorf("%w: %w", ErrNotBugsink, &APIError{Status: resp.StatusCode})

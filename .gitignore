@@ -42,6 +42,7 @@ vendor/
 /playwright/.cache/
 /playwright/.auth/
 /playwright/.trace.json
+/playwright/.event-detail.json
 
 # Local dev stack data and secrets
 .env

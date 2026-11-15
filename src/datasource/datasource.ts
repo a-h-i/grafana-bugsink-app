@@ -15,6 +15,7 @@ import {
   BugsinkOptions,
   BugsinkQuery,
   DEFAULT_QUERY,
+  EventDetail,
   EventList,
   IssueDetail,
   IssueHistory,
@@ -57,6 +58,10 @@ export class BugsinkDataSource extends DataSourceWithBackend<BugsinkQuery, Bugsi
 
   getIssue(id: string): Promise<IssueDetail> {
     return this.getResource(`issues/${encodeURIComponent(id)}`, undefined, QUIET);
+  }
+
+  getEvent(id: string): Promise<EventDetail> {
+    return this.getResource(`events/${encodeURIComponent(id)}`, undefined, QUIET);
   }
 
   getIssueTags(id: string): Promise<IssueTags> {

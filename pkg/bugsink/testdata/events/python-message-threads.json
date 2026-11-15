@@ -1,0 +1,107 @@
+{
+ "id": "b23b185d-655a-4a1b-abbb-535e70822364",
+ "ingested_at": "2026-11-15T07:59:11.181944Z",
+ "digested_at": "2026-11-15T07:59:11.249428Z",
+ "issue": "3d59673d-2f25-4bf3-bd5e-85e30ac17baf",
+ "grouping": 268,
+ "event_id": "505273ff-3fb8-468e-ae65-7d560be585e7",
+ "project": 1,
+ "timestamp": "2026-11-15T07:59:11.163950Z",
+ "digest_order": 1,
+ "data": {
+  "message": "message without exception (variant vm5-plan-probe)",
+  "level": "warning",
+  "event_id": "505273ff3fb8468eae657d560be585e7",
+  "timestamp": "2026-11-15T07:59:11.163950Z",
+  "contexts": {
+   "trace": {
+    "trace_id": "9ac1605451034bff8710b3694e763edd",
+    "span_id": "8f39fef4d47f5e39",
+    "parent_span_id": null
+   },
+   "runtime": {
+    "name": "CPython",
+    "version": "3.13.18",
+    "build": "3.13.18 (main, Nov  5 2026, 07:59:38) [GCC 14.2.0]"
+   }
+  },
+  "transaction_info": {},
+  "tags": {
+   "service": "m5-probe"
+  },
+  "breadcrumbs": {
+   "values": [
+    {
+     "category": "app",
+     "message": "parsing the order",
+     "level": "info",
+     "data": {
+      "order": 42
+     },
+     "timestamp": "2026-11-15T07:59:11.146060Z",
+     "type": "default"
+    }
+   ]
+  },
+  "threads": {
+   "values": [
+    {
+     "stacktrace": {
+      "frames": [
+       {
+        "filename": "produce.py",
+        "abs_path": "/app/produce.py",
+        "function": "<module>",
+        "module": "__main__",
+        "lineno": 17,
+        "pre_context": [
+         "    except json.JSONDecodeError as exc:",
+         "        raise RuntimeError(\"chained failure (variant vm5-plan-probe)\") from exc",
+         "except RuntimeError as exc:",
+         "    out[\"chained\"] = sentry_sdk.capture_exception(exc)",
+         ""
+        ],
+        "context_line": "out[\"message\"] = sentry_sdk.capture_message(\"message without exception (variant vm5-plan-probe)\", level=\"warning\")",
+        "post_context": [
+         "",
+         "def deep(n, blob):",
+         "    if n == 0:",
+         "        raise ValueError(\"deep failure (variant vm5-plan-probe)\")",
+         "    local_blob = blob"
+        ]
+       }
+      ]
+     },
+     "crashed": false,
+     "current": true
+    }
+   ]
+  },
+  "release": "m5-probe@0",
+  "environment": "development",
+  "sdk": {
+   "name": "sentry.python.fastapi",
+   "version": "2.75.0",
+   "packages": [
+    {
+     "name": "pypi:sentry-sdk",
+     "version": "2.75.0"
+    }
+   ],
+   "integrations": [
+    "argv",
+    "atexit",
+    "dedupe",
+    "excepthook",
+    "fastapi",
+    "logging",
+    "modules",
+    "starlette",
+    "stdlib",
+    "threading"
+   ]
+  },
+  "platform": "python"
+ },
+ "stacktrace_md": "# message without exception (variant vm5-plan-probe)\n\n### produce.py:17 in `<module>` [external]\n  12 |     except json.JSONDecodeError as exc:\n  13 |         raise RuntimeError(\"chained failure (variant vm5-plan-probe)\") from exc\n  14 | except RuntimeError as exc:\n  15 |     out[\"chained\"] = sentry_sdk.capture_exception(exc)\n  16 |\n▶ 17 | out[\"message\"] = sentry_sdk.capture_message(\"message without exception (variant vm5-plan-probe)\", level=\"warning\")\n  18 |\n  19 | def deep(n, blob):\n  20 |     if n == 0:\n  21 |         raise ValueError(\"deep failure (variant vm5-plan-probe)\")\n  22 |     local_blob = blob\n"
+}

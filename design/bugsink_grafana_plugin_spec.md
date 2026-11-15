@@ -92,8 +92,9 @@
 * **Event list** for one issue (`issue` is required, `q` search): `id`, `event_id`, `timestamp`, `ingested_at`. The list is ordered by `digest_order` (arrival order), newest first by default; there is no sort by event `timestamp`. The UI keeps this order and shows the event `timestamp` in a column; it does not re-sort, because the API pages in arrival order.
 * **Lookup by SDK event id** (`events/lookup/?project=&event_id=`), for links that carry the Sentry event id.
 * **Search by trace:** Bugsink indexes `contexts.trace.trace_id` as the tag `trace`. `GET /issues/?q=trace:<id>` finds the issues holding events of one trace, with or without `project`; `GET /events/?issue=<id>&q=trace:<id>` finds the events within one issue. Events cannot be searched by trace across issues (`issue` is required). The reverse link, from a Tempo trace to its Bugsink events, therefore goes trace, issue, events. The events query type does this itself: given `trace:<id>` and no issue, it finds the issues and then their events, and returns one frame. The fan-out groups rows by issue, last seen issue first, each issue's events newest first; it does not re-sort across issues.
-* **Event detail:** the full Sentry event payload (`data`). The plugin reads the exception, stack frames, breadcrumbs, tags, contexts (`trace_id`), environment and release from it. The Sentry event format is a stable public protocol.
-* **Stack trace display:** rendered from the structured frames in `data`. Bugsink's `stacktrace_md` is displayed as Markdown only as a fallback and is never parsed.
+* **Event detail:** the full Sentry event payload (`data`). The backend parses it field by field (`GET events/{id}`) and serves a normalised event, so the browser never gets the raw payload; a field of the wrong type is left empty, never an error. The plugin reads the exceptions, stack frames, breadcrumbs, tags, contexts (`trace_id`), environment, release, transaction and message from it. The Sentry event format is a stable public protocol. Reads are not cached.
+* **Event bounds:** at most 10 MiB of Bugsink's answer; the last 10 exceptions of a chain, the 250 frames nearest the error of each, 5 source lines on each side of a frame's line, the newest 100 breadcrumbs, the first 200 entries by key of each tags, contexts, context fields and breadcrumb data list, values cut at 1024 characters and Bugsink's stack trace text cut at 100 KB. Each bound reached adds a warning notice.
+* **Stack trace display:** rendered from the structured frames in `data`, without local variables. Bugsink's `stacktrace_md` is shown as preformatted plain text, not rendered Markdown, only as a fallback when no exception has frames; it is Bugsink's verbatim text, is never parsed, and can include local variables.
 
 ### D. App UI
 * **Issue list:**
@@ -104,9 +105,10 @@
   * The default instance is Grafana's default data source when it is a Bugsink one, else the first by name. Switching instance clears the project.
   * The detail page's address carries the list's query string, and Back to issues returns to the list with it.
   * Event-count sparkline per row from `event-counts` (one call per visible row; see §6).
-* **Issue detail:** a page at `issues/<id>` with a Back to issues button, an Open in Bugsink button and a Refresh button. Four reads run in parallel: the summary (type and message, status, project, transaction, event counts, first and last seen, unmute after and resolved by next release when set), Tags (the 5 values with the highest count per key and the number of other values; needs `events:read`), History (kind, time, author, comment) and Events (the issue's events, 25 per page, newest first). When the summary cannot be read, its message shows alone; otherwise each of the other three shows its own error under its heading. Failed reads raise no Grafana toast. Showing the latest event by default is left to M5.
-* **Event detail:**
-  * Exception message and formatted stack trace (in-app frames emphasized, others collapsible).
+* **Issue detail:** a page at `issues/<id>` with a Back to issues button, an Open in Bugsink button and a Refresh button. Five reads load at the same time (the Event read waits for the Events list when the address names no event): the Event (see Event detail below), the summary (type and message, status, project, transaction, event counts, first and last seen, unmute after and resolved by next release when set), Tags (the 5 values with the highest count per key and the number of other values; needs `events:read`), History (kind, time, author, comment) and Events (the issue's events, 25 per page, newest first). When the summary cannot be read, its message shows alone; otherwise each of the other four shows its own error under its heading. Failed reads raise no Grafana toast.
+* **Event detail:** an Event section on the issue page, between the summary and the Events table.
+  * The `event` address parameter holds Bugsink's id of the event on show; without it the newest event of the issue shows. Event ID in the Events table opens an event in the section. An `event` that belongs to another issue shows `This event belongs to another issue.`
+  * Identifying rows, then the exception chain with its stack trace (in-app frames open with source lines, others folded), or the message; Bugsink's stack trace text when no exception has frames.
   * Breadcrumb timeline.
   * Tags and contexts (`environment`, `release`, `trace_id`, user-defined tags).
   * **Open trace** and **Open logs** buttons (§5), hidden when the event has no `trace_id` or the target data source is not configured. The plugin does not check that the trace exists in Tempo.
@@ -227,6 +229,9 @@ Decided on 2026-11-15:
 | The dashboard time range for events | Not applied; an issue, an event id or a trace scopes the list | §4.C |
 | When the issue summary cannot be read | Its message shows alone and the other sections are not shown | §4.D |
 | How the App pages are built and get their data | Plain React with `@grafana/ui`; the issue list runs the data source's issues query | §3, §4.D |
+| What the Event section shows when no exception has frames | Bugsink's own stack trace text as plain text, possibly with local variables; the structured view never shows locals | §4.C, §4.D |
+| Where the event payload is parsed | In the backend, bounded, one normalised event for the browser and for M6 | §4.C |
+| An `event` address that names another issue's event | An error under Event, not the event | §4.D |
 | Code generated from the PolyForm Shield schema, compiled into the GPL plugin | Shipped without asking for permission; the owner accepted the risk on 2026-11-15. The generated client is confined to one package (`pkg/bugsink/internal/gen`), so a hand-written client can replace it if Bugsink B.V. objects | §9 |
 
 Still open:

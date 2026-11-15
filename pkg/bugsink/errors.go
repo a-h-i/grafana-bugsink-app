@@ -23,6 +23,7 @@ var (
 	ErrInvalidURL = errors.New("invalid Bugsink URL")
 	ErrNoToken    = errors.New("no API token")
 	ErrNotBugsink = errors.New("not a Bugsink API response")
+	ErrTooLarge   = errors.New("Bugsink's answer is larger than the read limit")
 )
 
 const missingCapabilityPrefix = "This token does not have the required capability: "

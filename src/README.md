@@ -2,13 +2,13 @@
 
 Connects Grafana to a self-hosted [Bugsink](https://www.bugsink.com/) error tracker.
 
-It adds a Bugsink data source. The data source checks the Bugsink address and the API token you give it, and tells you what is wrong when the check fails. It also queries issues and events for dashboards and Explore, and the app has a page that lists issues and a page for one issue.
+It adds a Bugsink data source. The data source checks the Bugsink address and the API token you give it, and tells you what is wrong when the check fails. It also queries issues and events for dashboards and Explore, and the app has a page that lists issues and a page for one issue, with the content of its events.
 
 ## Requirements
 
 - Grafana 13.2.0 or later.
 - A Bugsink instance that Grafana's server can reach over HTTP or HTTPS.
-- A Bugsink API token with the capabilities `projects:read`, `issues:read` and `events:read`. `events:read` is needed for the tags and events of an issue and for the events query.
+- A Bugsink API token with the capabilities `projects:read`, `issues:read` and `events:read`. `events:read` is needed for the tags and events of an issue, for the event detail and for the events query.
 
 ## Create an API token
 
@@ -27,6 +27,8 @@ Create the token in Bugsink. A token has capabilities, and it can be bound to on
 
 The test makes at least one read request per capability and reports the result. It stops at the first answer that ends the check: a connection error or timeout, a rejected token, an answer that is not Bugsink's, or an unexpected answer to a capability check.
 
+For an event whose stack frames are not inside an exception, the plugin shows Bugsink's own stack trace text, which can include local variables. Everyone who can query this data source in Grafana can read it.
+
 ## Browsing issues in the app
 
 The Bugsink app opens on a page that lists issues. You need at least one Bugsink data source.
@@ -43,16 +45,50 @@ The page has the limits of [Limits](#limits): at most 5000 issues are read and r
 
 ## Issue detail page
 
-Click the short id of an issue in the list to open its page. The page has four sections that load at the same time. When the summary cannot be read, its message shows alone, because the page has no issue to describe. Otherwise Tags, History and Events each show their own error under their heading. For example, a token without `events:read` still shows the summary and the history.
+Click the short id of an issue in the list to open its page. The page has five sections that load at the same time, except that Event waits for the Events list when the address names no event. When the summary cannot be read, its message shows alone, because the page has no issue to describe. Otherwise Event, Events, Tags and History each show their own error under their heading. For example, a token without `events:read` still shows the summary and the history.
 
 - **Summary**: the type and message, then Status (`Open`, `Muted` or `Resolved`), Project, Transaction, Events, Stored events, First seen and Last seen. Unmute after shows only when it is set, and Resolved by next release only when it is `Yes`.
+- **Event**: the content of one event (see [Event](#event)). Needs `events:read`.
+- **Events**: the issue's events with Event ID, Timestamp and Ingested at, in the order Bugsink returns them (newest first), 25 per page. Event ID opens the event in the Event section, and the icon beside it opens the event in Bugsink in a new tab. The event on show is in bold. At most 1000 events are read; when it stops there it shows `Only the newest 1000 events were read.`
 - **Tags**: one row per tag key, with its values and how many events carry each, for example `development (26), staging (3)`. A row shows the 5 values with the most events, then `and <n> more values`. The page reads at most 5000 tag values; when it stops there it shows `Only the first 5000 tag values were read.` Needs `events:read`.
 - **History**: what happened to the issue, newest first: the time, what happened (`First seen`, `Resolved`, `Muted`, `Regressed`, `Unmuted`, `Reopened`, `Resolved in the next release` or `Comment`), who did it when Bugsink knows, and the comment text. At most 5000 entries are read; when it stops there it shows `Only the newest 5000 history entries were read.`
-- **Events**: the issue's events with Event ID, Timestamp and Ingested at, in the order Bugsink returns them (newest first), 25 per page. Event ID opens the event in Bugsink in a new tab. At most 1000 events are read; when it stops there it shows `Only the newest 1000 events were read.`
 
 The buttons at the top: `Back to issues` returns to the list as you left it, with the same filters, data source and time range. `Open in Bugsink` opens the issue in Bugsink. The refresh button reads every section again, and retries a data source that failed to load. The list of events can be up to 15 seconds old (see [Limits](#limits)).
 
-The address holds the data source (`ds`) and the list's parameters, so a copied address opens the same page.
+The address holds the data source (`ds`), the list's parameters and the event on show (`event`), so a copied address opens the same page.
+
+### Event
+
+The Event section shows the newest event of the issue, the first row of Events. Click another Event ID in the Events section to show that event. The address keeps the choice in `event=<event id>`, where the id is Bugsink's id for the event. An `event` that belongs to another issue shows the error `This event belongs to another issue.`
+
+The section has these parts, in this order:
+
+- **Rows**: Event ID, Timestamp, Level, Environment, Release, Transaction and Trace ID. A row the event does not have is left out, except Event ID.
+- **Notices**: a warning for each bound the event reached (see [Event bounds](#event-bounds)).
+- **Exception**: the exceptions of the event, each with its type, its value and the badge `Unhandled` when the SDK marked it so. For `python` events the exceptions are in the order Bugsink holds them, the first cause first, with the frames from the oldest call to the newest, and `During handling of the above exception, another exception occurred:` between two exceptions. For every other platform the last exception comes first, the frames run from the newest call to the oldest, and `Caused by:` stands between two exceptions. A frame shows `file:line:column in function`. A frame the SDK marked as part of your application (`in_app`) shows in bold with up to 5 lines of source code before and after its line, when the SDK sent them. Other frames are folded, in groups of consecutive frames, under `<n> other frames`, without source lines. When no frame of an exception is part of your application, every frame shows.
+- **Message** and **Stack trace**: for an event without exceptions. Message shows when the event has a message. Stack trace is Bugsink's own text of the stack trace, shown as plain text, when the event has frames outside its exceptions, for example the stack trace of a message captured with `attach_stacktrace`. The same text shows when exceptions exist but none has frames. Bugsink writes this text, not the plugin, and it can include local variables. An event without frames shows `No stack trace.`
+- **Breadcrumbs**: the trail of actions before the event, oldest first, with Time, Type, Category, Level and Message. The message column shows the breadcrumb's data when it has no message.
+- **Event tags**: the tags of this one event, as Tag and Value.
+- **Contexts**: the contexts the SDK sent, such as `runtime` or `trace`, as Context, Key and Value.
+
+The structured stack trace does not show local variables. The Event section does not show the request, the user, the extra data, the modules or the SDK of the event. Open the event in Bugsink for them.
+
+### Event bounds
+
+The plugin reads an event from Bugsink and cuts it before it shows it. Each cut adds a warning in the Event section:
+
+| Bound | Notice |
+| :--- | :--- |
+| The last 10 exceptions of a chain | `Only the last 10 exceptions of the chain are shown.` |
+| The 250 frames nearest the error of an exception | `Only the 250 frames nearest the error are shown for <type>.` |
+| The newest 100 breadcrumbs | `Only the newest 100 breadcrumbs are shown.` |
+| The first 200 tags, contexts or fields of each list, and breadcrumb data entries, by key | `Only the first 200 tags, contexts or fields of each list are shown.` |
+| Values of 1024 characters | `Values longer than 1024 characters are cut.` |
+| Bugsink's stack trace text, 100 KB | `The stack trace text is cut at 100 KB.` |
+
+The plugin reads at most 10 MB of Bugsink's answer for one event. A larger answer shows `The answer from Bugsink is larger than 10 MB.` in the Event section. The Events row of the event still links to Bugsink. Bugsink's own limit for an event is `MAX_EVENT_SIZE`, 1 MiB by default, so the plugin's limit is reached only when Bugsink is set to accept much larger events.
+
+An event id that is not valid shows `"<id>" is not an event id.`
 
 ## Querying issues
 

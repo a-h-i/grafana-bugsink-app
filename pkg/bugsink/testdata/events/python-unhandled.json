@@ -1,0 +1,690 @@
+{
+ "id": "7b5d5499-1cf8-4734-8381-14cfb03da60e",
+ "ingested_at": "2026-11-13T23:29:57.367242Z",
+ "digested_at": "2026-11-13T23:29:57.425120Z",
+ "issue": "5f2241c0-3705-4514-975f-a53ff7c3a899",
+ "grouping": 122,
+ "event_id": "edc3b667-b55c-4a65-953d-32a653c98792",
+ "project": 1,
+ "timestamp": "2026-11-13T23:29:57.360302Z",
+ "digest_order": 3,
+ "data": {
+  "level": "error",
+  "exception": {
+   "values": [
+    {
+     "mechanism": {
+      "type": "starlette",
+      "handled": false
+     },
+     "module": null,
+     "type": "RuntimeError",
+     "value": "unhandled failure (variant v60)",
+     "stacktrace": {
+      "frames": [
+       {
+        "filename": "starlette/applications.py",
+        "abs_path": "/app/.venv/lib/python3.13/site-packages/starlette/applications.py",
+        "function": "__call__",
+        "module": "starlette.applications",
+        "lineno": 96,
+        "pre_context": [
+         "",
+         "    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:",
+         "        scope[\"app\"] = self",
+         "        if self.middleware_stack is None:",
+         "            self.middleware_stack = self.build_middleware_stack()"
+        ],
+        "context_line": "        await self.middleware_stack(scope, receive, send)",
+        "post_context": [
+         "",
+         "    def mount(self, path: str, app: ASGIApp, name: str | None = None) -> None:",
+         "        self.router.mount(path, app=app, name=name)  # pragma: no cover",
+         "",
+         "    def host(self, host: str, app: ASGIApp, name: str | None = None) -> None:"
+        ],
+        "in_app": false
+       },
+       {
+        "filename": "starlette/middleware/errors.py",
+        "abs_path": "/app/.venv/lib/python3.13/site-packages/starlette/middleware/errors.py",
+        "function": "__call__",
+        "module": "starlette.middleware.errors",
+        "lineno": 186,
+        "pre_context": [
+         "                await response(scope, receive, send)",
+         "",
+         "            # We always continue to raise the exception.",
+         "            # This allows servers to log the error, or allows test clients",
+         "            # to optionally raise the error within the test case."
+        ],
+        "context_line": "            raise exc",
+        "post_context": [
+         "",
+         "    def format_line(self, index: int, line: str, frame_lineno: int, frame_index: int) -> str:",
+         "        values = {",
+         "            # HTML escape - line could contain < or >",
+         "            \"line\": html.escape(line).replace(\" \", \"&nbsp\"),"
+        ],
+        "in_app": false
+       },
+       {
+        "filename": "starlette/middleware/errors.py",
+        "abs_path": "/app/.venv/lib/python3.13/site-packages/starlette/middleware/errors.py",
+        "function": "__call__",
+        "module": "starlette.middleware.errors",
+        "lineno": 164,
+        "pre_context": [
+         "            if message[\"type\"] == \"http.response.start\":",
+         "                response_started = True",
+         "            await send(message)",
+         "",
+         "        try:"
+        ],
+        "context_line": "            await self.app(scope, receive, _send)",
+        "post_context": [
+         "        except Exception as exc:",
+         "            request = Request(scope)",
+         "            if self.debug:",
+         "                # In debug mode, return traceback responses.",
+         "                response = await run_in_threadpool(self.debug_response, request, exc)"
+        ],
+        "in_app": false
+       },
+       {
+        "filename": "fastapi/telemetry/_asgi.py",
+        "abs_path": "/app/.venv/lib/python3.13/site-packages/fastapi/telemetry/_asgi.py",
+        "function": "__call__",
+        "module": "fastapi.telemetry._asgi",
+        "lineno": 151,
+        "pre_context": [
+         "    def __init__(self, app: ASGIApp) -> None:",
+         "        self.app = app",
+         "",
+         "    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:",
+         "        try:"
+        ],
+        "context_line": "            await self.app(scope, receive, send)",
+        "post_context": [
+         "        except Exception as exc:",
+         "            _exception(scope=scope, exc=exc)",
+         "            raise",
+         "",
+         ""
+        ],
+        "in_app": false
+       },
+       {
+        "filename": "starlette/middleware/exceptions.py",
+        "abs_path": "/app/.venv/lib/python3.13/site-packages/starlette/middleware/exceptions.py",
+        "function": "__call__",
+        "module": "starlette.middleware.exceptions",
+        "lineno": 63,
+        "pre_context": [
+         "        if scope[\"type\"] == \"http\":",
+         "            conn = Request(scope, receive, send)",
+         "        else:",
+         "            conn = WebSocket(scope, receive, send)",
+         ""
+        ],
+        "context_line": "        await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)",
+        "post_context": [
+         "",
+         "    async def http_exception(self, request: Request, exc: Exception) -> Response:",
+         "        assert isinstance(exc, HTTPException)",
+         "        if exc.status_code in {204, 304}:",
+         "            return Response(status_code=exc.status_code, headers=exc.headers)"
+        ],
+        "in_app": false
+       },
+       {
+        "filename": "starlette/_exception_handler.py",
+        "abs_path": "/app/.venv/lib/python3.13/site-packages/starlette/_exception_handler.py",
+        "function": "wrapped_app",
+        "module": "starlette._exception_handler",
+        "lineno": 53,
+        "pre_context": [
+         "",
+         "            if handler is None:",
+         "                handler = _lookup_exception_handler(exception_handlers, exc)",
+         "",
+         "            if handler is None:"
+        ],
+        "context_line": "                raise exc",
+        "post_context": [
+         "",
+         "            if response_started:",
+         "                raise RuntimeError(\"Caught handled exception, but response already started.\") from exc",
+         "",
+         "            if is_async_callable(handler):"
+        ],
+        "in_app": false
+       },
+       {
+        "filename": "starlette/_exception_handler.py",
+        "abs_path": "/app/.venv/lib/python3.13/site-packages/starlette/_exception_handler.py",
+        "function": "wrapped_app",
+        "module": "starlette._exception_handler",
+        "lineno": 42,
+        "pre_context": [
+         "            if message[\"type\"] == \"http.response.start\":",
+         "                response_started = True",
+         "            await send(message)",
+         "",
+         "        try:"
+        ],
+        "context_line": "            await app(scope, receive, sender)",
+        "post_context": [
+         "        except Exception as exc:",
+         "            handler = None",
+         "",
+         "            if isinstance(exc, HTTPException):",
+         "                handler = status_handlers.get(exc.status_code)"
+        ],
+        "in_app": false
+       },
+       {
+        "filename": "fastapi/middleware/asyncexitstack.py",
+        "abs_path": "/app/.venv/lib/python3.13/site-packages/fastapi/middleware/asyncexitstack.py",
+        "function": "__call__",
+        "module": "fastapi.middleware.asyncexitstack",
+        "lineno": 18,
+        "pre_context": [
+         "        self.context_name = context_name",
+         "",
+         "    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:",
+         "        async with AsyncExitStack() as stack:",
+         "            scope[self.context_name] = stack"
+        ],
+        "context_line": "            await self.app(scope, receive, send)",
+        "post_context": [],
+        "in_app": false
+       },
+       {
+        "filename": "starlette/routing.py",
+        "abs_path": "/app/.venv/lib/python3.13/site-packages/starlette/routing.py",
+        "function": "__call__",
+        "module": "starlette.routing",
+        "lineno": 683,
+        "pre_context": [
+         "",
+         "    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:",
+         "        \"\"\"",
+         "        The main entry point to the Router class.",
+         "        \"\"\""
+        ],
+        "context_line": "        await self.middleware_stack(scope, receive, send)",
+        "post_context": [
+         "",
+         "    async def app(self, scope: Scope, receive: Receive, send: Send) -> None:",
+         "        assert scope[\"type\"] in (\"http\", \"websocket\", \"lifespan\")",
+         "",
+         "        if \"router\" not in scope:"
+        ],
+        "in_app": false
+       },
+       {
+        "filename": "fastapi/routing.py",
+        "abs_path": "/app/.venv/lib/python3.13/site-packages/fastapi/routing.py",
+        "function": "app",
+        "module": "fastapi.routing",
+        "lineno": 2811,
+        "pre_context": [
+         "                _route_selected(",
+         "                    scope=scope,",
+         "                    path=getattr(route, \"path_format\", None),",
+         "                    mount=isinstance(route, routing.Mount),",
+         "                )"
+        ],
+        "context_line": "                await route.handle(scope, receive, send)",
+        "post_context": [
+         "                return",
+         "            if match == Match.PARTIAL and partial is None:",
+         "                partial = (route, child_scope)",
+         "",
+         "        if partial is not None:"
+        ],
+        "in_app": false
+       },
+       {
+        "filename": "fastapi/routing.py",
+        "abs_path": "/app/.venv/lib/python3.13/site-packages/fastapi/routing.py",
+        "function": "handle",
+        "module": "fastapi.routing",
+        "lineno": 1330,
+        "pre_context": [
+         "                await response(scope, receive, send)",
+         "                return",
+         "            assert effective_context.app is not None",
+         "            await effective_context.app(scope, receive, send)",
+         "            return"
+        ],
+        "context_line": "        await super().handle(scope, receive, send)",
+        "post_context": [
+         "",
+         "",
+         "@dataclass",
+         "class _RouterIncludeContext:",
+         "    included_router: \"APIRouter\""
+        ],
+        "in_app": false
+       },
+       {
+        "filename": "starlette/routing.py",
+        "abs_path": "/app/.venv/lib/python3.13/site-packages/starlette/routing.py",
+        "function": "handle",
+        "module": "starlette.routing",
+        "lineno": 289,
+        "pre_context": [
+         "                raise HTTPException(status_code=405, headers=headers)",
+         "            else:",
+         "                response = PlainTextResponse(\"Method Not Allowed\", status_code=405, headers=headers)",
+         "            await response(scope, receive, send)",
+         "        else:"
+        ],
+        "context_line": "            await self.app(scope, receive, send)",
+        "post_context": [
+         "",
+         "    def __eq__(self, other: Any) -> bool:",
+         "        return (",
+         "            isinstance(other, Route)",
+         "            and self.path == other.path"
+        ],
+        "in_app": false
+       },
+       {
+        "filename": "fastapi/routing.py",
+        "abs_path": "/app/.venv/lib/python3.13/site-packages/fastapi/routing.py",
+        "function": "app",
+        "module": "fastapi.routing",
+        "lineno": 166,
+        "pre_context": [
+         "                    \"and is not raising the exception again. Read more about it in the \"",
+         "                    \"docs: https://fastapi.tiangolo.com/tutorial/dependencies/dependencies-with-yield/#dependencies-with-yield-and-except\"",
+         "                )",
+         "",
+         "        # Same as in Starlette"
+        ],
+        "context_line": "        await wrap_app_handling_exceptions(app, request)(scope, receive, send)",
+        "post_context": [
+         "",
+         "    return app",
+         "",
+         "",
+         "# Copy of starlette.routing.websocket_session modified to include the"
+        ],
+        "in_app": false
+       },
+       {
+        "filename": "starlette/_exception_handler.py",
+        "abs_path": "/app/.venv/lib/python3.13/site-packages/starlette/_exception_handler.py",
+        "function": "wrapped_app",
+        "module": "starlette._exception_handler",
+        "lineno": 53,
+        "pre_context": [
+         "",
+         "            if handler is None:",
+         "                handler = _lookup_exception_handler(exception_handlers, exc)",
+         "",
+         "            if handler is None:"
+        ],
+        "context_line": "                raise exc",
+        "post_context": [
+         "",
+         "            if response_started:",
+         "                raise RuntimeError(\"Caught handled exception, but response already started.\") from exc",
+         "",
+         "            if is_async_callable(handler):"
+        ],
+        "in_app": false
+       },
+       {
+        "filename": "starlette/_exception_handler.py",
+        "abs_path": "/app/.venv/lib/python3.13/site-packages/starlette/_exception_handler.py",
+        "function": "wrapped_app",
+        "module": "starlette._exception_handler",
+        "lineno": 42,
+        "pre_context": [
+         "            if message[\"type\"] == \"http.response.start\":",
+         "                response_started = True",
+         "            await send(message)",
+         "",
+         "        try:"
+        ],
+        "context_line": "            await app(scope, receive, sender)",
+        "post_context": [
+         "        except Exception as exc:",
+         "            handler = None",
+         "",
+         "            if isinstance(exc, HTTPException):",
+         "                handler = status_handlers.get(exc.status_code)"
+        ],
+        "in_app": false
+       },
+       {
+        "filename": "fastapi/routing.py",
+        "abs_path": "/app/.venv/lib/python3.13/site-packages/fastapi/routing.py",
+        "function": "app",
+        "module": "fastapi.routing",
+        "lineno": 152,
+        "pre_context": [
+         "            response_awaited = False",
+         "            async with AsyncExitStack() as request_stack:",
+         "                scope[\"fastapi_inner_astack\"] = request_stack",
+         "                async with AsyncExitStack() as function_stack:",
+         "                    scope[\"fastapi_function_astack\"] = function_stack"
+        ],
+        "context_line": "                    response = await f(request)",
+        "post_context": [
+         "                await response(scope, receive, send)",
+         "                # Continues customization",
+         "                response_awaited = True",
+         "            if not response_awaited:",
+         "                raise FastAPIError("
+        ],
+        "in_app": false
+       },
+       {
+        "filename": "fastapi/routing.py",
+        "abs_path": "/app/.venv/lib/python3.13/site-packages/fastapi/routing.py",
+        "function": "app",
+        "module": "fastapi.routing",
+        "lineno": 745,
+        "pre_context": [
+         "                    status_code=status_code, solved_result=solved_result",
+         "                )",
+         "                response = actual_response_class(content=gen, **response_args)",
+         "                response.headers.raw.extend(solved_result.response.headers.raw)",
+         "            else:"
+        ],
+        "context_line": "                raw_response = await run_endpoint_function(",
+        "post_context": [
+         "                    dependant=dependant,",
+         "                    values=solved_result.values,",
+         "                    is_coroutine=is_coroutine,",
+         "                )",
+         "                if isinstance(raw_response, Response):"
+        ],
+        "in_app": false
+       },
+       {
+        "filename": "fastapi/routing.py",
+        "abs_path": "/app/.venv/lib/python3.13/site-packages/fastapi/routing.py",
+        "function": "run_endpoint_function",
+        "module": "fastapi.routing",
+        "lineno": 374,
+        "pre_context": [
+         "",
+         "    if is_coroutine:",
+         "        with _operation(name=\"endpoint\", function=dependant.call):",
+         "            return await dependant.call(**values)",
+         "    else:"
+        ],
+        "context_line": "        return await run_in_threadpool(",
+        "post_context": [
+         "            _run_sync_endpoint, function=dependant.call, arguments=values",
+         "        )",
+         "",
+         "",
+         "def _build_response_args("
+        ],
+        "in_app": false
+       },
+       {
+        "filename": "starlette/concurrency.py",
+        "abs_path": "/app/.venv/lib/python3.13/site-packages/starlette/concurrency.py",
+        "function": "run_in_threadpool",
+        "module": "starlette.concurrency",
+        "lineno": 34,
+        "pre_context": [
+         "            task_group.start_soon(run, functools.partial(func, **kwargs))",
+         "",
+         "",
+         "async def run_in_threadpool(func: Callable[P, T], *args: P.args, **kwargs: P.kwargs) -> T:",
+         "    func = functools.partial(func, *args, **kwargs)"
+        ],
+        "context_line": "    return await anyio.to_thread.run_sync(func)",
+        "post_context": [
+         "",
+         "",
+         "class _StopIteration(Exception):",
+         "    pass",
+         ""
+        ],
+        "in_app": false
+       },
+       {
+        "filename": "anyio/to_thread.py",
+        "abs_path": "/app/.venv/lib/python3.13/site-packages/anyio/to_thread.py",
+        "function": "run_sync",
+        "module": "anyio.to_thread",
+        "lineno": 65,
+        "pre_context": [
+         "            \"deprecated since AnyIO 4.1.0; use `abandon_on_cancel=` instead\",",
+         "            DeprecationWarning,",
+         "            stacklevel=2,",
+         "        )",
+         ""
+        ],
+        "context_line": "    return await get_async_backend().run_sync_in_worker_thread(",
+        "post_context": [
+         "        func, args, abandon_on_cancel=abandon_on_cancel, limiter=limiter",
+         "    )",
+         "",
+         "",
+         "def current_default_thread_limiter() -> CapacityLimiter:"
+        ],
+        "in_app": false
+       },
+       {
+        "filename": "anyio/_backends/_asyncio.py",
+        "abs_path": "/app/.venv/lib/python3.13/site-packages/anyio/_backends/_asyncio.py",
+        "function": "run_sync_in_worker_thread",
+        "module": "anyio._backends._asyncio",
+        "lineno": 2779,
+        "pre_context": [
+         "                    worker_scope = scope",
+         "                else:",
+         "                    worker_scope = scope._parent_scope",
+         "",
+         "                worker.queue.put_nowait((context, func, args, future, worker_scope))"
+        ],
+        "context_line": "                return await future",
+        "post_context": [
+         "",
+         "    @classmethod",
+         "    def check_cancelled(cls) -> None:",
+         "        scope: CancelScope | None = threadlocals.current_cancel_scope",
+         "        while scope is not None:"
+        ],
+        "in_app": false
+       },
+       {
+        "filename": "anyio/_backends/_asyncio.py",
+        "abs_path": "/app/.venv/lib/python3.13/site-packages/anyio/_backends/_asyncio.py",
+        "function": "run",
+        "module": "anyio._backends._asyncio",
+        "lineno": 1124,
+        "pre_context": [
+         "                result = None",
+         "                exception: BaseException | None = None",
+         "                if not future.cancelled():",
+         "                    threadlocals.current_cancel_scope = cancel_scope",
+         "                    try:"
+        ],
+        "context_line": "                        result = context.run(func, *args)",
+        "post_context": [
+         "                    except BaseException as exc:",
+         "                        exception = exc",
+         "                    finally:",
+         "                        del threadlocals.current_cancel_scope",
+         ""
+        ],
+        "in_app": false
+       },
+       {
+        "filename": "fastapi/telemetry/_api.py",
+        "abs_path": "/app/.venv/lib/python3.13/site-packages/fastapi/telemetry/_api.py",
+        "function": "_run_sync_endpoint",
+        "module": "fastapi.telemetry._api",
+        "lineno": 244,
+        "pre_context": [
+         "",
+         "def _run_sync_endpoint(",
+         "    *, function: Callable[..., Any], arguments: dict[str, Any]",
+         ") -> Any:",
+         "    with _operation(name=\"endpoint\", function=function):"
+        ],
+        "context_line": "        return function(**arguments)",
+        "post_context": [
+         "",
+         "",
+         "def _route_selected(",
+         "    *, scope: MutableMapping[str, Any], path: str | None, mount: bool = False",
+         ") -> None:"
+        ],
+        "in_app": false
+       },
+       {
+        "filename": "app.py",
+        "abs_path": "/app/app.py",
+        "function": "error",
+        "module": "app",
+        "lineno": 87,
+        "pre_context": [
+         "",
+         "",
+         "@api.get(\"/error\")",
+         "def error(variant: str | None = None):",
+         "    logger.info(\"handling a request that fails with an unhandled error\")"
+        ],
+        "context_line": "    _prepare(variant)",
+        "post_context": [
+         "",
+         "",
+         "@api.post(\"/no-trace\")",
+         "def no_trace():",
+         "    result: dict[str, str | None] = {}"
+        ],
+        "in_app": true
+       },
+       {
+        "filename": "app.py",
+        "abs_path": "/app/app.py",
+        "function": "_prepare",
+        "module": "app",
+        "lineno": 64,
+        "pre_context": [
+         "def _fail(variant: str | None) -> None:",
+         "    raise RuntimeError(_message(\"unhandled failure\", variant))",
+         "",
+         "",
+         "def _prepare(variant: str | None) -> None:"
+        ],
+        "context_line": "    _fail(variant)",
+        "post_context": [
+         "",
+         "",
+         "@api.get(\"/healthz\")",
+         "def healthz():",
+         "    return {\"status\": \"ok\"}"
+        ],
+        "in_app": true
+       },
+       {
+        "filename": "app.py",
+        "abs_path": "/app/app.py",
+        "function": "_fail",
+        "module": "app",
+        "lineno": 60,
+        "pre_context": [
+         "def _message(text: str, variant: str | None) -> str:",
+         "    return text if variant is None else f\"{text} (variant v{variant})\"",
+         "",
+         "",
+         "def _fail(variant: str | None) -> None:"
+        ],
+        "context_line": "    raise RuntimeError(_message(\"unhandled failure\", variant))",
+        "post_context": [
+         "",
+         "",
+         "def _prepare(variant: str | None) -> None:",
+         "    _fail(variant)",
+         ""
+        ],
+        "in_app": true
+       }
+      ]
+     }
+    }
+   ]
+  },
+  "event_id": "edc3b667b55c4a65953d32a653c98792",
+  "timestamp": "2026-11-13T23:29:57.360302Z",
+  "contexts": {
+   "trace": {
+    "trace_id": "97dc67918c526f3d407fdcec08e956da",
+    "span_id": "27c9af474792f5cc"
+   },
+   "runtime": {
+    "name": "CPython",
+    "version": "3.13.18",
+    "build": "3.13.18 (main, Nov  5 2026, 07:59:38) [GCC 14.2.0]"
+   }
+  },
+  "transaction": "/error",
+  "transaction_info": {
+   "source": "route"
+  },
+  "tags": {
+   "service": "sample-python"
+  },
+  "breadcrumbs": {
+   "values": [
+    {
+     "type": "log",
+     "level": "info",
+     "category": "sample-python",
+     "message": "handling a request that fails with an unhandled error",
+     "timestamp": "2026-11-13T23:29:57.353657Z",
+     "data": {}
+    },
+    {
+     "type": "log",
+     "level": "info",
+     "category": "uvicorn.access",
+     "message": "127.0.0.1:50650 - \"GET /error?variant=60 HTTP/1.1\" 500",
+     "timestamp": "2026-11-13T23:29:57.355717Z",
+     "data": {}
+    }
+   ]
+  },
+  "release": "sample-python@0.1.0",
+  "environment": "development",
+  "sdk": {
+   "name": "sentry.python.fastapi",
+   "version": "2.75.0",
+   "packages": [
+    {
+     "name": "pypi:sentry-sdk",
+     "version": "2.75.0"
+    }
+   ],
+   "integrations": [
+    "argv",
+    "atexit",
+    "dedupe",
+    "excepthook",
+    "fastapi",
+    "logging",
+    "modules",
+    "otlp",
+    "starlette",
+    "stdlib",
+    "threading"
+   ]
+  },
+  "platform": "python"
+ },
+ "stacktrace_md": "# RuntimeError\nunhandled failure (variant v60)\n\n### starlette/applications.py:96 in `__call__` [external]\n   91 |\n   92 |     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:\n   93 |         scope[\"app\"] = self\n   94 |         if self.middleware_stack is None:\n   95 |             self.middleware_stack = self.build_middleware_stack()\n▶  96 |         await self.middleware_stack(scope, receive, send)\n   97 |\n   98 |     def mount(self, path: str, app: ASGIApp, name: str | None = None) -> None:\n   99 |         self.router.mount(path, app=app, name=name)  # pragma: no cover\n  100 |\n  101 |     def host(self, host: str, app: ASGIApp, name: str | None = None) -> None:\n\n### starlette/middleware/errors.py:186 in `__call__` [external]\n  181 |                 await response(scope, receive, send)\n  182 |\n  183 |             # We always continue to raise the exception.\n  184 |             # This allows servers to log the error, or allows test clients\n  185 |             # to optionally raise the error within the test case.\n▶ 186 |             raise exc\n  187 |\n  188 |     def format_line(self, index: int, line: str, frame_lineno: int, frame_index: int) -> str:\n  189 |         values = {\n  190 |             # HTML escape - line could contain < or >\n  191 |             \"line\": html.escape(line).replace(\" \", \"&nbsp\"),\n\n### starlette/middleware/errors.py:164 in `__call__` [external]\n  159 |             if message[\"type\"] == \"http.response.start\":\n  160 |                 response_started = True\n  161 |             await send(message)\n  162 |\n  163 |         try:\n▶ 164 |             await self.app(scope, receive, _send)\n  165 |         except Exception as exc:\n  166 |             request = Request(scope)\n  167 |             if self.debug:\n  168 |                 # In debug mode, return traceback responses.\n  169 |                 response = await run_in_threadpool(self.debug_response, request, exc)\n\n### fastapi/telemetry/_asgi.py:151 in `__call__` [external]\n  146 |     def __init__(self, app: ASGIApp) -> None:\n  147 |         self.app = app\n  148 |\n  149 |     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:\n  150 |         try:\n▶ 151 |             await self.app(scope, receive, send)\n  152 |         except Exception as exc:\n  153 |             _exception(scope=scope, exc=exc)\n  154 |             raise\n  155 |\n  156 |\n\n### starlette/middleware/exceptions.py:63 in `__call__` [external]\n  58 |         if scope[\"type\"] == \"http\":\n  59 |             conn = Request(scope, receive, send)\n  60 |         else:\n  61 |             conn = WebSocket(scope, receive, send)\n  62 |\n▶ 63 |         await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)\n  64 |\n  65 |     async def http_exception(self, request: Request, exc: Exception) -> Response:\n  66 |         assert isinstance(exc, HTTPException)\n  67 |         if exc.status_code in {204, 304}:\n  68 |             return Response(status_code=exc.status_code, headers=exc.headers)\n\n### starlette/_exception_handler.py:53 in `wrapped_app` [external]\n  48 |\n  49 |             if handler is None:\n  50 |                 handler = _lookup_exception_handler(exception_handlers, exc)\n  51 |\n  52 |             if handler is None:\n▶ 53 |                 raise exc\n  54 |\n  55 |             if response_started:\n  56 |                 raise RuntimeError(\"Caught handled exception, but response already started.\") from exc\n  57 |\n  58 |             if is_async_callable(handler):\n\n### starlette/_exception_handler.py:42 in `wrapped_app` [external]\n  37 |             if message[\"type\"] == \"http.response.start\":\n  38 |                 response_started = True\n  39 |             await send(message)\n  40 |\n  41 |         try:\n▶ 42 |             await app(scope, receive, sender)\n  43 |         except Exception as exc:\n  44 |             handler = None\n  45 |\n  46 |             if isinstance(exc, HTTPException):\n  47 |                 handler = status_handlers.get(exc.status_code)\n\n### fastapi/middleware/asyncexitstack.py:18 in `__call__` [external]\n  13 |         self.context_name = context_name\n  14 |\n  15 |     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:\n  16 |         async with AsyncExitStack() as stack:\n  17 |             scope[self.context_name] = stack\n▶ 18 |             await self.app(scope, receive, send)\n\n### starlette/routing.py:683 in `__call__` [external]\n  678 |\n  679 |     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:\n  680 |         \"\"\"\n  681 |         The main entry point to the Router class.\n  682 |         \"\"\"\n▶ 683 |         await self.middleware_stack(scope, receive, send)\n  684 |\n  685 |     async def app(self, scope: Scope, receive: Receive, send: Send) -> None:\n  686 |         assert scope[\"type\"] in (\"http\", \"websocket\", \"lifespan\")\n  687 |\n  688 |         if \"router\" not in scope:\n\n### fastapi/routing.py:2811 in `app` [external]\n  2806 |                 _route_selected(\n  2807 |                     scope=scope,\n  2808 |                     path=getattr(route, \"path_format\", None),\n  2809 |                     mount=isinstance(route, routing.Mount),\n  2810 |                 )\n▶ 2811 |                 await route.handle(scope, receive, send)\n  2812 |                 return\n  2813 |             if match == Match.PARTIAL and partial is None:\n  2814 |                 partial = (route, child_scope)\n  2815 |\n  2816 |         if partial is not None:\n\n### fastapi/routing.py:1330 in `handle` [external]\n  1325 |                 await response(scope, receive, send)\n  1326 |                 return\n  1327 |             assert effective_context.app is not None\n  1328 |             await effective_context.app(scope, receive, send)\n  1329 |             return\n▶ 1330 |         await super().handle(scope, receive, send)\n  1331 |\n  1332 |\n  1333 | @dataclass\n  1334 | class _RouterIncludeContext:\n  1335 |     included_router: \"APIRouter\"\n\n### starlette/routing.py:289 in `handle` [external]\n  284 |                 raise HTTPException(status_code=405, headers=headers)\n  285 |             else:\n  286 |                 response = PlainTextResponse(\"Method Not Allowed\", status_code=405, headers=headers)\n  287 |             await response(scope, receive, send)\n  288 |         else:\n▶ 289 |             await self.app(scope, receive, send)\n  290 |\n  291 |     def __eq__(self, other: Any) -> bool:\n  292 |         return (\n  293 |             isinstance(other, Route)\n  294 |             and self.path == other.path\n\n### fastapi/routing.py:166 in `app` [external]\n  161 |                     \"and is not raising the exception again. Read more about it in the \"\n  162 |                     \"docs: https://fastapi.tiangolo.com/tutorial/dependencies/dependencies-with-yield/#dependencies-with-yield-and-except\"\n  163 |                 )\n  164 |\n  165 |         # Same as in Starlette\n▶ 166 |         await wrap_app_handling_exceptions(app, request)(scope, receive, send)\n  167 |\n  168 |     return app\n  169 |\n  170 |\n  171 | # Copy of starlette.routing.websocket_session modified to include the\n\n### starlette/_exception_handler.py:53 in `wrapped_app` [external]\n  48 |\n  49 |             if handler is None:\n  50 |                 handler = _lookup_exception_handler(exception_handlers, exc)\n  51 |\n  52 |             if handler is None:\n▶ 53 |                 raise exc\n  54 |\n  55 |             if response_started:\n  56 |                 raise RuntimeError(\"Caught handled exception, but response already started.\") from exc\n  57 |\n  58 |             if is_async_callable(handler):\n\n### starlette/_exception_handler.py:42 in `wrapped_app` [external]\n  37 |             if message[\"type\"] == \"http.response.start\":\n  38 |                 response_started = True\n  39 |             await send(message)\n  40 |\n  41 |         try:\n▶ 42 |             await app(scope, receive, sender)\n  43 |         except Exception as exc:\n  44 |             handler = None\n  45 |\n  46 |             if isinstance(exc, HTTPException):\n  47 |                 handler = status_handlers.get(exc.status_code)\n\n### fastapi/routing.py:152 in `app` [external]\n  147 |             response_awaited = False\n  148 |             async with AsyncExitStack() as request_stack:\n  149 |                 scope[\"fastapi_inner_astack\"] = request_stack\n  150 |                 async with AsyncExitStack() as function_stack:\n  151 |                     scope[\"fastapi_function_astack\"] = function_stack\n▶ 152 |                     response = await f(request)\n  153 |                 await response(scope, receive, send)\n  154 |                 # Continues customization\n  155 |                 response_awaited = True\n  156 |             if not response_awaited:\n  157 |                 raise FastAPIError(\n\n### fastapi/routing.py:745 in `app` [external]\n  740 |                     status_code=status_code, solved_result=solved_result\n  741 |                 )\n  742 |                 response = actual_response_class(content=gen, **response_args)\n  743 |                 response.headers.raw.extend(solved_result.response.headers.raw)\n  744 |             else:\n▶ 745 |                 raw_response = await run_endpoint_function(\n  746 |                     dependant=dependant,\n  747 |                     values=solved_result.values,\n  748 |                     is_coroutine=is_coroutine,\n  749 |                 )\n  750 |                 if isinstance(raw_response, Response):\n\n### fastapi/routing.py:374 in `run_endpoint_function` [external]\n  369 |\n  370 |     if is_coroutine:\n  371 |         with _operation(name=\"endpoint\", function=dependant.call):\n  372 |             return await dependant.call(**values)\n  373 |     else:\n▶ 374 |         return await run_in_threadpool(\n  375 |             _run_sync_endpoint, function=dependant.call, arguments=values\n  376 |         )\n  377 |\n  378 |\n  379 | def _build_response_args(\n\n### starlette/concurrency.py:34 in `run_in_threadpool` [external]\n  29 |             task_group.start_soon(run, functools.partial(func, **kwargs))\n  30 |\n  31 |\n  32 | async def run_in_threadpool(func: Callable[P, T], *args: P.args, **kwargs: P.kwargs) -> T:\n  33 |     func = functools.partial(func, *args, **kwargs)\n▶ 34 |     return await anyio.to_thread.run_sync(func)\n  35 |\n  36 |\n  37 | class _StopIteration(Exception):\n  38 |     pass\n  39 |\n\n### anyio/to_thread.py:65 in `run_sync` [external]\n  60 |             \"deprecated since AnyIO 4.1.0; use `abandon_on_cancel=` instead\",\n  61 |             DeprecationWarning,\n  62 |             stacklevel=2,\n  63 |         )\n  64 |\n▶ 65 |     return await get_async_backend().run_sync_in_worker_thread(\n  66 |         func, args, abandon_on_cancel=abandon_on_cancel, limiter=limiter\n  67 |     )\n  68 |\n  69 |\n  70 | def current_default_thread_limiter() -> CapacityLimiter:\n\n### anyio/_backends/_asyncio.py:2779 in `run_sync_in_worker_thread` [external]\n  2774 |                     worker_scope = scope\n  2775 |                 else:\n  2776 |                     worker_scope = scope._parent_scope\n  2777 |\n  2778 |                 worker.queue.put_nowait((context, func, args, future, worker_scope))\n▶ 2779 |                 return await future\n  2780 |\n  2781 |     @classmethod\n  2782 |     def check_cancelled(cls) -> None:\n  2783 |         scope: CancelScope | None = threadlocals.current_cancel_scope\n  2784 |         while scope is not None:\n\n### anyio/_backends/_asyncio.py:1124 in `run` [external]\n  1119 |                 result = None\n  1120 |                 exception: BaseException | None = None\n  1121 |                 if not future.cancelled():\n  1122 |                     threadlocals.current_cancel_scope = cancel_scope\n  1123 |                     try:\n▶ 1124 |                         result = context.run(func, *args)\n  1125 |                     except BaseException as exc:\n  1126 |                         exception = exc\n  1127 |                     finally:\n  1128 |                         del threadlocals.current_cancel_scope\n  1129 |\n\n### fastapi/telemetry/_api.py:244 in `_run_sync_endpoint` [external]\n  239 |\n  240 | def _run_sync_endpoint(\n  241 |     *, function: Callable[..., Any], arguments: dict[str, Any]\n  242 | ) -> Any:\n  243 |     with _operation(name=\"endpoint\", function=function):\n▶ 244 |         return function(**arguments)\n  245 |\n  246 |\n  247 | def _route_selected(\n  248 |     *, scope: MutableMapping[str, Any], path: str | None, mount: bool = False\n  249 | ) -> None:\n\n### app.py:87 in `error` [in-app]\n  82 |\n  83 |\n  84 | @api.get(\"/error\")\n  85 | def error(variant: str | None = None):\n  86 |     logger.info(\"handling a request that fails with an unhandled error\")\n▶ 87 |     _prepare(variant)\n  88 |\n  89 |\n  90 | @api.post(\"/no-trace\")\n  91 | def no_trace():\n  92 |     result: dict[str, str | None] = {}\n\n### app.py:64 in `_prepare` [in-app]\n  59 | def _fail(variant: str | None) -> None:\n  60 |     raise RuntimeError(_message(\"unhandled failure\", variant))\n  61 |\n  62 |\n  63 | def _prepare(variant: str | None) -> None:\n▶ 64 |     _fail(variant)\n  65 |\n  66 |\n  67 | @api.get(\"/healthz\")\n  68 | def healthz():\n  69 |     return {\"status\": \"ok\"}\n\n### app.py:60 in `_fail` [in-app]\n  55 | def _message(text: str, variant: str | None) -> str:\n  56 |     return text if variant is None else f\"{text} (variant v{variant})\"\n  57 |\n  58 |\n  59 | def _fail(variant: str | None) -> None:\n▶ 60 |     raise RuntimeError(_message(\"unhandled failure\", variant))\n  61 |\n  62 |\n  63 | def _prepare(variant: str | None) -> None:\n  64 |     _fail(variant)\n  65 |\n"
+}

@@ -1,0 +1,17 @@
+{
+ "id": "97adbabe-2dcd-4773-b24f-5088549ae235",
+ "ingested_at": "2026-11-13T23:29:58.427359Z",
+ "digested_at": "2026-11-13T23:29:58.442580Z",
+ "issue": "c73c66b7-3bcc-4f2a-a031-717cd0406956",
+ "grouping": 263,
+ "event_id": "47b90656-09a0-4917-91ab-a2151b4cf672",
+ "project": 2,
+ "timestamp": "2026-11-13T23:29:58.427359Z",
+ "digest_order": 3,
+ "data": {
+  "message": "probe event for project 2",
+  "level": "error",
+  "event_id": "47b9065609a0491791aba2151b4cf672"
+ },
+ "stacktrace_md": "_No stacktrace available._"
+}

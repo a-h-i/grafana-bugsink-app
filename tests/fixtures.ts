@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-import { AppPage, test as base } from '@grafana/plugin-e2e';
+import { AppPage, expect, test as base } from '@grafana/plugin-e2e';
+import type { Page } from '@playwright/test';
 import pluginJson from '../src/plugin.json';
 
 type AppTestFixture = {
@@ -16,4 +17,22 @@ export const test = base.extend<AppTestFixture>({
   },
 });
 
-export { expect } from '@grafana/plugin-e2e';
+export { expect };
+
+export function section(page: Page, heading: string | RegExp) {
+  const title =
+    typeof heading === 'string' ? new RegExp(`^${heading.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`) : heading;
+  return page.locator('section').filter({ has: page.locator(':scope > :is(h2, h3)').filter({ hasText: title }) });
+}
+
+export async function openFirstIssue(page: Page) {
+  const firstIssue = page
+    .locator('tbody tr')
+    .first()
+    .getByRole('link', { name: /^SAMPLE-PYTHON-/ });
+  await expect(async () => {
+    await page.reload();
+    await expect(firstIssue).toBeVisible({ timeout: 3000 });
+  }).toPass();
+  await firstIssue.click();
+}

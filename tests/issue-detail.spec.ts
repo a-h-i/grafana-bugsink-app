@@ -1,34 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-import type { Page } from '@playwright/test';
 import pluginJson from '../src/plugin.json';
-import { expect, test } from './fixtures';
+import { expect, openFirstIssue, section, test } from './fixtures';
 import { BUGSINK_BROWSER_URL, EVENT_MARKER } from './seeded';
 
 const LIST_PARAMS = `ds=bugsink&project=1&state=all&q=${EVENT_MARKER}&from=now-24h&to=now`;
 const EVENT_LINK = new RegExp(`^${BUGSINK_BROWSER_URL}/issues/issue/[0-9a-f-]{36}/event/[0-9a-f-]{36}/$`);
-
-function section(page: Page, heading: string | RegExp) {
-  return page.locator('section').filter({ has: page.getByRole('heading', { name: heading }) });
-}
-
-async function openFirstIssue(page: Page) {
-  await expect(async () => {
-    await page.reload();
-    await expect(
-      page
-        .locator('tbody tr')
-        .first()
-        .getByRole('link', { name: /^SAMPLE-PYTHON-/ })
-    ).toBeVisible({
-      timeout: 3000,
-    });
-  }).toPass();
-  await page
-    .locator('tbody tr')
-    .first()
-    .getByRole('link', { name: /^SAMPLE-PYTHON-/ })
-    .click();
-}
 
 test.describe('issue detail page', () => {
   test('click an issue to see its detail', async ({ gotoPage, page }) => {
@@ -46,7 +22,10 @@ test.describe('issue detail page', () => {
     await expect(section(page, 'Tags')).toContainText('environment');
     await expect(section(page, 'Tags')).toContainText('development');
     await expect(section(page, 'History')).toContainText('First seen');
-    const eventLink = section(page, 'Events').locator('tbody tr').first().getByRole('link');
+    const eventLink = section(page, 'Events')
+      .locator('tbody tr')
+      .first()
+      .getByRole('link', { name: /^Open event .* in Bugsink$/ });
     await expect(eventLink).toHaveAttribute('href', EVENT_LINK);
   });
 

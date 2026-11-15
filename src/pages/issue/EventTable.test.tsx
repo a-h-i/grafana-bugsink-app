@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import React from 'react';
 import { fireEvent, render, screen } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import { EventRow } from '../../datasource/types';
 import { EventTable } from './EventTable';
 
@@ -19,8 +20,12 @@ function row(overrides: Partial<EventRow> = {}): EventRow {
   };
 }
 
-function renderTable(rows: EventRow[]) {
-  return render(<EventTable rows={rows} timeZone="utc" />);
+function renderTable(rows: EventRow[], selectedId?: string) {
+  return render(
+    <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+      <EventTable rows={rows} timeZone="utc" selectedId={selectedId} eventHref={(r) => `/issues/i1?event=${r.id}`} />
+    </MemoryRouter>
+  );
 }
 
 describe('EventTable', () => {
@@ -34,22 +39,38 @@ describe('EventTable', () => {
     ]);
   });
 
-  it('links the event id to the event in a new tab and formats the times', () => {
+  it('links the event id to the event in the page and formats the times', () => {
     renderTable([row()]);
 
     const link = screen.getByRole('link', { name: 'aaaaaaaa-0000-0000-0000-000000000001' });
-    expect(link).toHaveAttribute('href', 'http://localhost:8800/issues/issue/i1/event/e1/');
-    expect(link).toHaveAttribute('target', '_blank');
-    expect(link.getAttribute('rel')).toContain('noreferrer');
+    expect(link).toHaveAttribute('href', '/issues/i1?event=e1');
+    expect(link).not.toHaveAttribute('target');
     expect(screen.getByText('2026-11-15 05:45:33')).toBeInTheDocument();
     expect(screen.getByText('2026-11-15 05:45:40')).toBeInTheDocument();
   });
 
-  it('shows the event id as text when the row has no url', () => {
+  it('opens the event in Bugsink in a new tab from an icon link', () => {
+    renderTable([row()]);
+
+    const link = screen.getByRole('link', { name: 'Open event aaaaaaaa-0000-0000-0000-000000000001 in Bugsink' });
+    expect(link).toHaveAttribute('href', 'http://localhost:8800/issues/issue/i1/event/e1/');
+    expect(link).toHaveAttribute('target', '_blank');
+    expect(link.getAttribute('rel')).toContain('noreferrer');
+  });
+
+  it('has no Bugsink link when the row has no url', () => {
     renderTable([row({ url: undefined })]);
 
-    expect(screen.queryByRole('link')).not.toBeInTheDocument();
-    expect(screen.getByText('aaaaaaaa-0000-0000-0000-000000000001')).toBeInTheDocument();
+    expect(screen.getAllByRole('link')).toHaveLength(1);
+    expect(screen.queryByRole('link', { name: /in Bugsink/ })).not.toBeInTheDocument();
+  });
+
+  it('shows the selected event id as text and links the others', () => {
+    renderTable([row({ id: 'a', eventId: 'ev-a' }), row({ id: 'b', eventId: 'ev-b' })], 'a');
+
+    expect(screen.getByText('ev-a')).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'ev-a' })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'ev-b' })).toHaveAttribute('href', '/issues/i1?event=b');
   });
 
   it('keeps the order it is given', () => {
@@ -74,6 +95,6 @@ describe('EventTable', () => {
   it('explains an issue without stored events', () => {
     renderTable([]);
 
-    expect(screen.getByText('No stored events.')).toBeInTheDocument();
+    expect(screen.getByText('No stored events.').tagName).toBe('P');
   });
 });

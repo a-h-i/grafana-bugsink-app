@@ -8,3 +8,5 @@ export const SAMPLE_APP_URL = process.env.SAMPLE_APP_URL || 'http://localhost:88
 export const BUGSINK_BROWSER_URL = 'http://localhost:8800';
 export const EVENT_MARKER = 'm2-e2e';
 export const TRACE_MARKER = 'm4-trace';
+export const CHAINED_MARKER = 'm5-chained';
+export const MESSAGE_MARKER = 'm5-message';

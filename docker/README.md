@@ -106,6 +106,8 @@ the collector with OpenTelemetry, sharing the trace context.
 | :--- | :--- |
 | `GET /healthz` | `{"status": "ok"}` |
 | `GET /handled[?variant=<v>]` | captures a handled error; returns `{trace_id, event_id}` |
+| `GET /chained[?variant=<v>]` | adds the breadcrumb `parsing the order` and captures a `RuntimeError` raised from a `JSONDecodeError` (two chained exceptions with frames); returns `{trace_id, event_id}` |
+| `GET /message[?variant=<v>]` | captures a warning message with the stack trace of the call (`attach_stacktrace`) and no exception; the plugin shows Bugsink's stack trace text for it; returns `{event_id}` |
 | `GET /error[?variant=<v>]` | unhandled error, HTTP 500; captured by Sentry under the request's trace id |
 | `POST /no-trace` | captures an error outside any span; returns `{event_id}`; its trace id is not in Tempo |
 

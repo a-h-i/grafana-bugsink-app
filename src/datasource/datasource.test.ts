@@ -58,6 +58,14 @@ describe('BugsinkDataSource', () => {
     expect(getResource).toHaveBeenCalledWith(path, undefined, { showErrorAlert: false });
   });
 
+  it('reads an event with its id encoded', async () => {
+    const ds = createDataSource();
+    const getResource = jest.spyOn(ds, 'getResource').mockResolvedValue({ id: 'a/b' });
+
+    await expect(ds.getEvent('a/b')).resolves.toEqual({ id: 'a/b' });
+    expect(getResource).toHaveBeenCalledWith('events/a%2Fb', undefined, { showErrorAlert: false });
+  });
+
   it('encodes the issue id in the resource path', async () => {
     const ds = createDataSource();
     const getResource = jest.spyOn(ds, 'getResource').mockResolvedValue({});

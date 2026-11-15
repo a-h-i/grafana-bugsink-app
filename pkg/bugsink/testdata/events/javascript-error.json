@@ -1,0 +1,98 @@
+{
+ "id": "3c9d2a4e-1f5b-4c7d-8e9a-0b1c2d3e4f50",
+ "ingested_at": "2025-11-15T08:00:01Z",
+ "digested_at": "2025-11-15T08:00:02Z",
+ "issue": "fe36e79c-e229-428a-9650-c5f31ad3fdc1",
+ "grouping": 1,
+ "event_id": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d",
+ "project": 3,
+ "timestamp": "2025-11-15T08:00:00Z",
+ "digest_order": 1,
+ "data": {
+  "platform": "javascript",
+  "level": "error",
+  "event_id": "a1b2c3d4e5f64a7b8c9d0e1f2a3b4c5d",
+  "timestamp": 1763193600.25,
+  "exception": [
+   {
+    "type": "TypeError",
+    "value": "x is not a function",
+    "mechanism": {
+     "type": "chained",
+     "source": "cause",
+     "exception_id": 1,
+     "parent_id": 0
+    },
+    "stacktrace": {
+     "frames": [
+      {
+       "filename": "http://localhost:8820/assets/index.js",
+       "function": "run",
+       "lineno": 10,
+       "colno": 5,
+       "in_app": true
+      },
+      {
+       "filename": "http://localhost:8820/assets/index.js",
+       "function": "handle",
+       "lineno": 22,
+       "colno": 9,
+       "in_app": true
+      }
+     ]
+    }
+   },
+   {
+    "type": "Error",
+    "value": "boom",
+    "mechanism": {
+     "type": "onunhandledrejection",
+     "handled": false,
+     "exception_id": 0
+    },
+    "stacktrace": {
+     "frames": [
+      {
+       "filename": "http://localhost:8820/assets/index.js",
+       "function": "main",
+       "lineno": 3,
+       "colno": 1,
+       "in_app": true
+      }
+     ]
+    }
+   }
+  ],
+  "breadcrumbs": [
+   {
+    "timestamp": 1763193600.25,
+    "type": "default",
+    "category": "ui.click",
+    "level": "info",
+    "message": "button#go",
+    "data": {
+     "x": 1
+    }
+   }
+  ],
+  "tags": [
+   [
+    "browser",
+    "Chrome 131"
+   ],
+   [
+    "service",
+    "sample-js"
+   ]
+  ],
+  "contexts": {
+   "browser": {
+    "name": "Chrome",
+    "version": "131"
+   }
+  },
+  "logentry": {
+   "formatted": "x"
+  }
+ }
+}

@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
+import json
 import logging
 import os
 import threading
@@ -45,6 +46,7 @@ sentry_sdk.init(
     dsn=os.environ["SENTRY_DSN"],
     environment="development",
     release=f"{SERVICE}@{VERSION}",
+    attach_stacktrace=True,
     integrations=[OTLPIntegration(setup_otlp_traces_exporter=False)],
 )
 sentry_sdk.set_tag("service", SERVICE)
@@ -79,6 +81,26 @@ def handled(variant: str | None = None):
     except ValueError as exc:
         event_id = sentry_sdk.capture_exception(exc)
     return {"trace_id": trace_id, "event_id": event_id}
+
+
+@api.get("/chained")
+def chained(variant: str | None = None):
+    trace_id = format(trace.get_current_span().get_span_context().trace_id, "032x")
+    sentry_sdk.add_breadcrumb(category="app", message="parsing the order", data={"order": 42})
+    try:
+        try:
+            json.loads("{not json")
+        except json.JSONDecodeError as cause:
+            raise RuntimeError(_message("chained failure", variant)) from cause
+    except RuntimeError as exc:
+        event_id = sentry_sdk.capture_exception(exc)
+    return {"trace_id": trace_id, "event_id": event_id}
+
+
+@api.get("/message")
+def message(variant: str | None = None):
+    event_id = sentry_sdk.capture_message(_message("message without exception", variant), level="warning")
+    return {"event_id": event_id}
 
 
 @api.get("/error")

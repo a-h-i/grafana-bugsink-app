@@ -18,6 +18,8 @@ func userMessage(err error) (message string, status backend.Status) {
 	switch {
 	case isTimeout(err):
 		return "Bugsink did not answer in time.", backend.StatusTimeout
+	case errors.Is(err, bugsink.ErrTooLarge):
+		return "The answer from Bugsink is larger than 10 MB.", backend.StatusBadGateway
 	case errors.Is(err, bugsink.ErrNotBugsink):
 		return "The answer did not look like a Bugsink API.", backend.StatusBadGateway
 	case !errors.As(err, &apiErr):

@@ -1,0 +1,210 @@
+{
+ "id": "6fa49c16-5ba1-4afc-9285-e8bd4872b01f",
+ "ingested_at": "2026-11-15T07:59:11.167329Z",
+ "digested_at": "2026-11-15T07:59:11.180820Z",
+ "issue": "d95d684b-21aa-4e1d-8567-9eb922cc7c1b",
+ "grouping": 267,
+ "event_id": "d8168165-6e9f-46a9-97bf-d6e5f1e6f088",
+ "project": 1,
+ "timestamp": "2026-11-15T07:59:11.146901Z",
+ "digest_order": 1,
+ "data": {
+  "level": "error",
+  "exception": {
+   "values": [
+    {
+     "mechanism": {
+      "type": "generic",
+      "handled": true
+     },
+     "module": "json.decoder",
+     "type": "JSONDecodeError",
+     "value": "Expecting property name enclosed in double quotes: line 1 column 2 (char 1)",
+     "stacktrace": {
+      "frames": [
+       {
+        "filename": "produce.py",
+        "abs_path": "/app/produce.py",
+        "function": "<module>",
+        "module": "__main__",
+        "lineno": 11,
+        "pre_context": [
+         "out = {}",
+         "",
+         "sentry_sdk.add_breadcrumb(category=\"app\", message=\"parsing the order\", level=\"info\", data={\"order\": 42})",
+         "try:",
+         "    try:"
+        ],
+        "context_line": "        json.loads(\"{not json\")",
+        "post_context": [
+         "    except json.JSONDecodeError as exc:",
+         "        raise RuntimeError(\"chained failure (variant vm5-plan-probe)\") from exc",
+         "except RuntimeError as exc:",
+         "    out[\"chained\"] = sentry_sdk.capture_exception(exc)",
+         ""
+        ]
+       },
+       {
+        "filename": "__init__.py",
+        "abs_path": "/usr/local/lib/python3.13/json/__init__.py",
+        "function": "loads",
+        "module": "json",
+        "lineno": 352,
+        "pre_context": [
+         "        s = s.decode(detect_encoding(s), 'surrogatepass')",
+         "",
+         "    if (cls is None and object_hook is None and",
+         "            parse_int is None and parse_float is None and",
+         "            parse_constant is None and object_pairs_hook is None and not kw):"
+        ],
+        "context_line": "        return _default_decoder.decode(s)",
+        "post_context": [
+         "    if cls is None:",
+         "        cls = JSONDecoder",
+         "    if object_hook is not None:",
+         "        kw['object_hook'] = object_hook",
+         "    if object_pairs_hook is not None:"
+        ]
+       },
+       {
+        "filename": "json/decoder.py",
+        "abs_path": "/usr/local/lib/python3.13/json/decoder.py",
+        "function": "decode",
+        "module": "json.decoder",
+        "lineno": 345,
+        "pre_context": [
+         "    def decode(self, s, _w=WHITESPACE.match):",
+         "        \"\"\"Return the Python representation of ``s`` (a ``str`` instance",
+         "        containing a JSON document).",
+         "",
+         "        \"\"\""
+        ],
+        "context_line": "        obj, end = self.raw_decode(s, idx=_w(s, 0).end())",
+        "post_context": [
+         "        end = _w(s, end).end()",
+         "        if end != len(s):",
+         "            raise JSONDecodeError(\"Extra data\", s, end)",
+         "        return obj",
+         ""
+        ]
+       },
+       {
+        "filename": "json/decoder.py",
+        "abs_path": "/usr/local/lib/python3.13/json/decoder.py",
+        "function": "raw_decode",
+        "module": "json.decoder",
+        "lineno": 361,
+        "pre_context": [
+         "        This can be used to decode a JSON document from a string that may",
+         "        have extraneous data at the end.",
+         "",
+         "        \"\"\"",
+         "        try:"
+        ],
+        "context_line": "            obj, end = self.scan_once(s, idx)",
+        "post_context": [
+         "        except StopIteration as err:",
+         "            raise JSONDecodeError(\"Expecting value\", s, err.value) from None",
+         "        return obj, end"
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "mechanism": {
+      "type": "generic",
+      "handled": true
+     },
+     "module": null,
+     "type": "RuntimeError",
+     "value": "chained failure (variant vm5-plan-probe)",
+     "stacktrace": {
+      "frames": [
+       {
+        "filename": "produce.py",
+        "abs_path": "/app/produce.py",
+        "function": "<module>",
+        "module": "__main__",
+        "lineno": 13,
+        "pre_context": [
+         "sentry_sdk.add_breadcrumb(category=\"app\", message=\"parsing the order\", level=\"info\", data={\"order\": 42})",
+         "try:",
+         "    try:",
+         "        json.loads(\"{not json\")",
+         "    except json.JSONDecodeError as exc:"
+        ],
+        "context_line": "        raise RuntimeError(\"chained failure (variant vm5-plan-probe)\") from exc",
+        "post_context": [
+         "except RuntimeError as exc:",
+         "    out[\"chained\"] = sentry_sdk.capture_exception(exc)",
+         "",
+         "out[\"message\"] = sentry_sdk.capture_message(\"message without exception (variant vm5-plan-probe)\", level=\"warning\")",
+         ""
+        ]
+       }
+      ]
+     }
+    }
+   ]
+  },
+  "event_id": "d81681656e9f46a997bfd6e5f1e6f088",
+  "timestamp": "2026-11-15T07:59:11.146901Z",
+  "contexts": {
+   "trace": {
+    "trace_id": "9ac1605451034bff8710b3694e763edd",
+    "span_id": "8f39fef4d47f5e39",
+    "parent_span_id": null
+   },
+   "runtime": {
+    "name": "CPython",
+    "version": "3.13.18",
+    "build": "3.13.18 (main, Nov  5 2026, 07:59:38) [GCC 14.2.0]"
+   }
+  },
+  "transaction_info": {},
+  "tags": {
+   "service": "m5-probe"
+  },
+  "breadcrumbs": {
+   "values": [
+    {
+     "category": "app",
+     "message": "parsing the order",
+     "level": "info",
+     "data": {
+      "order": 42
+     },
+     "timestamp": "2026-11-15T07:59:11.146060Z",
+     "type": "default"
+    }
+   ]
+  },
+  "release": "m5-probe@0",
+  "environment": "development",
+  "sdk": {
+   "name": "sentry.python.fastapi",
+   "version": "2.75.0",
+   "packages": [
+    {
+     "name": "pypi:sentry-sdk",
+     "version": "2.75.0"
+    }
+   ],
+   "integrations": [
+    "argv",
+    "atexit",
+    "dedupe",
+    "excepthook",
+    "fastapi",
+    "logging",
+    "modules",
+    "starlette",
+    "stdlib",
+    "threading"
+   ]
+  },
+  "platform": "python"
+ },
+ "stacktrace_md": "# JSONDecodeError\nExpecting property name enclosed in double quotes: line 1 column 2 (char 1)\n\n### produce.py:11 in `<module>` [external]\n   6 | out = {}\n   7 |\n   8 | sentry_sdk.add_breadcrumb(category=\"app\", message=\"parsing the order\", level=\"info\", data={\"order\": 42})\n   9 | try:\n  10 |     try:\n▶ 11 |         json.loads(\"{not json\")\n  12 |     except json.JSONDecodeError as exc:\n  13 |         raise RuntimeError(\"chained failure (variant vm5-plan-probe)\") from exc\n  14 | except RuntimeError as exc:\n  15 |     out[\"chained\"] = sentry_sdk.capture_exception(exc)\n  16 |\n\n### __init__.py:352 in `loads` [external]\n  347 |         s = s.decode(detect_encoding(s), 'surrogatepass')\n  348 |\n  349 |     if (cls is None and object_hook is None and\n  350 |             parse_int is None and parse_float is None and\n  351 |             parse_constant is None and object_pairs_hook is None and not kw):\n▶ 352 |         return _default_decoder.decode(s)\n  353 |     if cls is None:\n  354 |         cls = JSONDecoder\n  355 |     if object_hook is not None:\n  356 |         kw['object_hook'] = object_hook\n  357 |     if object_pairs_hook is not None:\n\n### json/decoder.py:345 in `decode` [external]\n  340 |     def decode(self, s, _w=WHITESPACE.match):\n  341 |         \"\"\"Return the Python representation of ``s`` (a ``str`` instance\n  342 |         containing a JSON document).\n  343 |\n  344 |         \"\"\"\n▶ 345 |         obj, end = self.raw_decode(s, idx=_w(s, 0).end())\n  346 |         end = _w(s, end).end()\n  347 |         if end != len(s):\n  348 |             raise JSONDecodeError(\"Extra data\", s, end)\n  349 |         return obj\n  350 |\n\n### json/decoder.py:361 in `raw_decode` [external]\n  356 |         This can be used to decode a JSON document from a string that may\n  357 |         have extraneous data at the end.\n  358 |\n  359 |         \"\"\"\n  360 |         try:\n▶ 361 |             obj, end = self.scan_once(s, idx)\n  362 |         except StopIteration as err:\n  363 |             raise JSONDecodeError(\"Expecting value\", s, err.value) from None\n  364 |         return obj, end\n\n**During handling of the above exception, another exception occurred:**\n\n# RuntimeError\nchained failure (variant vm5-plan-probe)\n\n### produce.py:13 in `<module>` [external]\n   8 | sentry_sdk.add_breadcrumb(category=\"app\", message=\"parsing the order\", level=\"info\", data={\"order\": 42})\n   9 | try:\n  10 |     try:\n  11 |         json.loads(\"{not json\")\n  12 |     except json.JSONDecodeError as exc:\n▶ 13 |         raise RuntimeError(\"chained failure (variant vm5-plan-probe)\") from exc\n  14 | except RuntimeError as exc:\n  15 |     out[\"chained\"] = sentry_sdk.capture_exception(exc)\n  16 |\n  17 | out[\"message\"] = sentry_sdk.capture_message(\"message without exception (variant vm5-plan-probe)\", level=\"warning\")\n  18 |\n"
+}

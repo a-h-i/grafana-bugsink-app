@@ -122,11 +122,16 @@ resource routes, and the events query type runs in the data source.
 
 ### M5: Event detail
 
-* **Scope:** event detail view parsed from the Sentry payload in `data`: exception and stack trace
-  (in-app frames emphasized, others collapsible), breadcrumb timeline, tags and contexts;
-  `stacktrace_md` as a Markdown fallback; the latest event shown by default on the issue page.
+Built; see [`plans/m5-event-detail.md`](plans/m5-event-detail.md). The backend parses the payload and serves a
+normalised event through `GET events/{id}`.
+
+* **Scope:** Event section on the issue page, parsed from the Sentry payload in `data`: exception chain and stack
+  trace (in-app frames open with source lines, others folded), breadcrumb timeline, tags and contexts, with bounds
+  that add notices; Bugsink's `stacktrace_md` as preformatted plain text when no exception has frames; the newest
+  event shown by default, any other chosen from the Events table with `event=` in the address.
 * **Demo:** open an issue and read the latest event's stack trace and breadcrumbs; switch to an older
-  event; open an event whose payload has no structured frames and see the fallback.
+  event; open a message event whose payload has no exception frames and see Bugsink's stack trace text. Runs as
+  an e2e test.
 * **Watch for:** payloads from different SDKs (Python and JavaScript differ in frame fields), chained
   exceptions, events with no exception at all (messages), very large payloads.
 

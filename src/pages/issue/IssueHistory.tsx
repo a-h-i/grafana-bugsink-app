@@ -2,7 +2,7 @@
 import React from 'react';
 import { dateTimeFormat } from '@grafana/data';
 import { TimeZone } from '@grafana/schema';
-import { Alert } from '@grafana/ui';
+import { Alert, Stack } from '@grafana/ui';
 import { HistoryEntry, IssueHistory as History } from '../../datasource/types';
 
 const KIND_LABELS: Record<string, string> = {
@@ -29,17 +29,17 @@ export function IssueHistory({ history, timeZone }: { history: History; timeZone
       {history.history.length === 0 ? (
         <p>No history.</p>
       ) : (
-        <ul style={{ listStyle: 'none', padding: 0 }}>
+        <Stack direction="column" gap={1} role="list">
           {history.history.map((entry) => (
-            <li key={entry.id} style={{ marginBottom: 8 }}>
+            <div key={entry.id} role="listitem">
               <div>
                 <time>{dateTimeFormat(entry.timestamp, { timeZone, format: TIME_FORMAT })}</time>{' '}
                 <strong>{describe(entry)}</strong>
               </div>
               {entry.comment && <div>{entry.comment}</div>}
-            </li>
+            </div>
           ))}
-        </ul>
+        </Stack>
       )}
     </>
   );

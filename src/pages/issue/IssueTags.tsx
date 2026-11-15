@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import React from 'react';
-import { Alert } from '@grafana/ui';
+import { Alert, Column, InteractiveTable } from '@grafana/ui';
 import { IssueTag, IssueTags as Tags } from '../../datasource/types';
+import { PAGE_SIZE } from '../issues/IssueTable';
 
 function valuesText(tag: IssueTag): string {
   const shown = tag.values.map(({ value, count }) => `${value} (${count})`).join(', ');
@@ -11,6 +12,11 @@ function valuesText(tag: IssueTag): string {
   return `${shown} and ${tag.otherValues} more value${tag.otherValues === 1 ? '' : 's'}`;
 }
 
+const columns: Array<Column<IssueTag>> = [
+  { id: 'key', header: 'Tag', cell: ({ row }) => <span>{row.original.key}</span> },
+  { id: 'values', header: 'Values', cell: ({ row }) => <span>{valuesText(row.original)}</span> },
+];
+
 export function IssueTags({ tags }: { tags: Tags }): React.JSX.Element {
   return (
     <>
@@ -18,22 +24,7 @@ export function IssueTags({ tags }: { tags: Tags }): React.JSX.Element {
       {tags.tags.length === 0 ? (
         <p>No tags.</p>
       ) : (
-        <table>
-          <thead>
-            <tr>
-              <th style={{ textAlign: 'left', paddingRight: 24 }}>Tag</th>
-              <th style={{ textAlign: 'left' }}>Values</th>
-            </tr>
-          </thead>
-          <tbody>
-            {tags.tags.map((tag) => (
-              <tr key={tag.key}>
-                <td style={{ paddingRight: 24 }}>{tag.key}</td>
-                <td>{valuesText(tag)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <InteractiveTable columns={columns} data={tags.tags} getRowId={(tag) => tag.key} pageSize={PAGE_SIZE} />
       )}
     </>
   );

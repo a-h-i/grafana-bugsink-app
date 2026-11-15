@@ -37,6 +37,7 @@ func TestUserMessage(t *testing.T) {
 		{"no detail", &bugsink.APIError{Status: 500}, "Bugsink answered HTTP 500.", 502},
 		{"not bugsink", fmt.Errorf("%w: %w", bugsink.ErrNotBugsink, &bugsink.APIError{Status: 200}),
 			"The answer did not look like a Bugsink API.", 502},
+		{"too large", fmt.Errorf("reading: %w", bugsink.ErrTooLarge), "The answer from Bugsink is larger than 10 MB.", 502},
 		{"network", fmt.Errorf("Get \"http://x/?token=secret\": %w", errors.New("dial tcp 127.0.0.1:1: connect: connection refused")),
 			"Cannot reach Bugsink: dial tcp 127.0.0.1:1: connect: connection refused.", 502},
 		{"cancelled", context.Canceled, timeoutMessage, 504},

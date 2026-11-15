@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/a-h-i/grafana-bugsink-app/pkg/bugsink"
+	"github.com/google/uuid"
 	"github.com/grafana/grafana-plugin-sdk-go/backend"
 )
 
@@ -45,6 +46,7 @@ func (d *Datasource) routes() *http.ServeMux {
 	get("/issues/{id}", d.handleIssue)
 	get("/issues/{id}/tags", d.handleIssueTags)
 	get("/issues/{id}/history", d.handleIssueHistory)
+	get("/events/{id}", d.handleEvent)
 	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
 		writeMessage(w, http.StatusNotFound, "Not found.")
 	})
@@ -80,6 +82,8 @@ func (d *Datasource) issueRequest(w http.ResponseWriter, r *http.Request) (strin
 
 func notAnIssueID(id string) string { return fmt.Sprintf("%q is not an issue id.", id) }
 
+func notAnEventID(id string) string { return fmt.Sprintf("%q is not an event id.", id) }
+
 // canonical answers a path with an empty or dot segment as JSON; the mux would redirect it.
 func canonical(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -87,9 +91,12 @@ func canonical(next http.Handler) http.Handler {
 		for _, raw := range segments {
 			segment, err := url.PathUnescape(raw)
 			if err != nil || segment == "" || segment == "." || segment == ".." {
-				if segments[0] == "issues" {
+				switch segments[0] {
+				case "issues":
 					writeMessage(w, http.StatusBadRequest, notAnIssueID(segment))
-				} else {
+				case "events":
+					writeMessage(w, http.StatusBadRequest, notAnEventID(segment))
+				default:
 					writeMessage(w, http.StatusNotFound, "Not found.")
 				}
 				return
@@ -269,6 +276,172 @@ func (d *Datasource) handleIssueHistory(w http.ResponseWriter, r *http.Request) 
 		History   []historyEntry `json:"history"`
 		Truncated bool           `json:"truncated"`
 	}{entries, h.Truncated})
+}
+
+type keyValueBody struct {
+	Key   string `json:"key"`
+	Value string `json:"value"`
+}
+
+type contextBody struct {
+	Name   string         `json:"name"`
+	Fields []keyValueBody `json:"fields"`
+}
+
+type frameBody struct {
+	Filename    string   `json:"filename"`
+	Function    string   `json:"function"`
+	Module      string   `json:"module"`
+	Lineno      *int     `json:"lineno"`
+	Colno       *int     `json:"colno"`
+	InApp       bool     `json:"inApp"`
+	PreContext  []string `json:"preContext"`
+	ContextLine *string  `json:"contextLine"`
+	PostContext []string `json:"postContext"`
+}
+
+type exceptionBody struct {
+	Type          string      `json:"type"`
+	Value         string      `json:"value"`
+	Module        string      `json:"module"`
+	Mechanism     string      `json:"mechanism"`
+	Handled       *bool       `json:"handled"`
+	Frames        []frameBody `json:"frames"`
+	FramesOmitted int         `json:"framesOmitted"`
+}
+
+type breadcrumbBody struct {
+	Timestamp *time.Time     `json:"timestamp"`
+	Type      string         `json:"type"`
+	Category  string         `json:"category"`
+	Level     string         `json:"level"`
+	Message   string         `json:"message"`
+	Data      []keyValueBody `json:"data"`
+}
+
+type eventBody struct {
+	ID           string           `json:"id"`
+	EventID      string           `json:"eventId"`
+	IssueID      string           `json:"issueId"`
+	ProjectID    int              `json:"projectId"`
+	Project      string           `json:"project"`
+	Timestamp    time.Time        `json:"timestamp"`
+	IngestedAt   time.Time        `json:"ingestedAt"`
+	Platform     string           `json:"platform"`
+	Level        string           `json:"level"`
+	Message      string           `json:"message"`
+	Transaction  string           `json:"transaction"`
+	Environment  string           `json:"environment"`
+	Release      string           `json:"release"`
+	TraceID      string           `json:"traceId"`
+	Tags         []keyValueBody   `json:"tags"`
+	Contexts     []contextBody    `json:"contexts"`
+	Exceptions   []exceptionBody  `json:"exceptions"`
+	Breadcrumbs  []breadcrumbBody `json:"breadcrumbs"`
+	StacktraceMd *string          `json:"stacktraceMd"`
+	Notices      []string         `json:"notices"`
+	BugsinkURL   string           `json:"bugsinkUrl"`
+}
+
+func keyValuesJSON(list []bugsink.KeyValue) []keyValueBody {
+	out := make([]keyValueBody, 0, len(list))
+	for _, kv := range list {
+		out = append(out, keyValueBody{Key: kv.Key, Value: kv.Value})
+	}
+	return out
+}
+
+func exceptionsJSON(list []bugsink.Exception) []exceptionBody {
+	out := make([]exceptionBody, 0, len(list))
+	for _, x := range list {
+		frames := make([]frameBody, 0, len(x.Frames))
+		for _, f := range x.Frames {
+			frames = append(frames, frameBody{
+				Filename: f.Filename, Function: f.Function, Module: f.Module, Lineno: f.Lineno, Colno: f.Colno,
+				InApp: f.InApp, PreContext: orEmpty(f.PreContext), ContextLine: f.ContextLine, PostContext: orEmpty(f.PostContext),
+			})
+		}
+		out = append(out, exceptionBody{
+			Type: x.Type, Value: x.Value, Module: x.Module, Mechanism: x.Mechanism, Handled: x.Handled,
+			Frames: frames, FramesOmitted: x.FramesOmitted,
+		})
+	}
+	return out
+}
+
+func eventJSON(e bugsink.EventDetail, project, browserURL string) eventBody {
+	contexts := make([]contextBody, 0, len(e.Contexts))
+	for _, c := range e.Contexts {
+		contexts = append(contexts, contextBody{Name: c.Name, Fields: keyValuesJSON(c.Fields)})
+	}
+	breadcrumbs := make([]breadcrumbBody, 0, len(e.Breadcrumbs))
+	for _, b := range e.Breadcrumbs {
+		breadcrumbs = append(breadcrumbs, breadcrumbBody{
+			Timestamp: b.Timestamp, Type: b.Type, Category: b.Category, Level: b.Level, Message: b.Message,
+			Data: keyValuesJSON(b.Data),
+		})
+	}
+	var stacktraceMd *string
+	if e.StacktraceMD != "" {
+		stacktraceMd = &e.StacktraceMD
+	}
+	return eventBody{
+		ID: e.ID, EventID: e.EventID, IssueID: e.IssueID, ProjectID: e.ProjectID, Project: project,
+		Timestamp: e.Timestamp, IngestedAt: e.IngestedAt,
+		Platform: e.Platform, Level: e.Level, Message: e.Message, Transaction: e.Transaction,
+		Environment: e.Environment, Release: e.Release, TraceID: e.TraceID,
+		Tags: keyValuesJSON(e.Tags), Contexts: contexts, Exceptions: exceptionsJSON(e.Exceptions),
+		Breadcrumbs: breadcrumbs, StacktraceMd: stacktraceMd, Notices: eventNotices(e),
+		BugsinkURL: browserURL + "/issues/issue/" + e.IssueID + "/event/" + e.ID + "/",
+	}
+}
+
+// eventNotices lists what the parser cut from the event.
+func eventNotices(e bugsink.EventDetail) []string {
+	notices := []string{}
+	if e.ExceptionsCut {
+		notices = append(notices, fmt.Sprintf("Only the last %d exceptions of the chain are shown.", bugsink.MaxExceptions))
+	}
+	for _, x := range e.Exceptions {
+		if x.FramesOmitted > 0 {
+			notices = append(notices, fmt.Sprintf("Only the %d frames nearest the error are shown for %s.", bugsink.MaxFrames, x.Type))
+		}
+	}
+	if e.BreadcrumbsCut {
+		notices = append(notices, fmt.Sprintf("Only the newest %d breadcrumbs are shown.", bugsink.MaxBreadcrumbs))
+	}
+	if e.EntriesCut {
+		notices = append(notices, fmt.Sprintf("Only the first %d tags, contexts or fields of each list are shown.", bugsink.MaxEntries))
+	}
+	if e.ValuesCut {
+		notices = append(notices, fmt.Sprintf("Values longer than %d characters are cut.", bugsink.MaxValueLength))
+	}
+	if e.StacktraceMDCut {
+		notices = append(notices, "The stack trace text is cut at 100 KB.")
+	}
+	return notices
+}
+
+func (d *Datasource) handleEvent(w http.ResponseWriter, r *http.Request) {
+	if !d.settingsValid(w) {
+		return
+	}
+	raw := r.PathValue("id")
+	id, err := uuid.Parse(raw)
+	if err != nil || len(raw) != len(id.String()) {
+		writeMessage(w, http.StatusBadRequest, notAnEventID(raw))
+		return
+	}
+	event, err := d.client.GetEvent(r.Context(), id)
+	if err != nil {
+		writeBugsinkError(w, err)
+		return
+	}
+	project, ok := d.projectNames(r.Context())[event.ProjectID]
+	if !ok {
+		project = strconv.Itoa(event.ProjectID)
+	}
+	writeJSON(w, http.StatusOK, eventJSON(event, project, d.browserURL))
 }
 
 func writeMessage(w http.ResponseWriter, status int, message string) {

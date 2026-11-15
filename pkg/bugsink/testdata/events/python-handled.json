@@ -1,0 +1,120 @@
+{
+ "id": "4a5bdf5b-112e-45c3-be05-1298fe9bd26e",
+ "ingested_at": "2026-11-15T07:52:59.389609Z",
+ "digested_at": "2026-11-15T07:52:59.403528Z",
+ "issue": "8e9b7869-578a-434b-9f50-f31117daae1d",
+ "grouping": 264,
+ "event_id": "99283df9-e950-4741-9629-fa99817deb14",
+ "project": 1,
+ "timestamp": "2026-11-15T07:52:59.387590Z",
+ "digest_order": 145,
+ "data": {
+  "level": "error",
+  "exception": {
+   "values": [
+    {
+     "mechanism": {
+      "type": "generic",
+      "handled": true
+     },
+     "module": null,
+     "type": "ValueError",
+     "value": "handled failure (variant vm2-e2e)",
+     "stacktrace": {
+      "frames": [
+       {
+        "filename": "app.py",
+        "abs_path": "/app/app.py",
+        "function": "handled",
+        "module": "app",
+        "lineno": 78,
+        "pre_context": [
+         "def handled(variant: str | None = None):",
+         "    trace_id = format(trace.get_current_span().get_span_context().trace_id, \"032x\")",
+         "    logger.info(\"handling a request that fails with a handled error\")",
+         "    sentry_sdk.add_breadcrumb(category=\"app\", message=\"about to fail\", level=\"info\")",
+         "    try:"
+        ],
+        "context_line": "        raise ValueError(_message(\"handled failure\", variant))",
+        "post_context": [
+         "    except ValueError as exc:",
+         "        event_id = sentry_sdk.capture_exception(exc)",
+         "    return {\"trace_id\": trace_id, \"event_id\": event_id}",
+         "",
+         ""
+        ],
+        "in_app": true
+       }
+      ]
+     }
+    }
+   ]
+  },
+  "event_id": "99283df9e95047419629fa99817deb14",
+  "timestamp": "2026-11-15T07:52:59.387590Z",
+  "contexts": {
+   "trace": {
+    "trace_id": "f42c0d94a1069e4c582410cc98508dc2",
+    "span_id": "2b5d294de86cc070"
+   },
+   "runtime": {
+    "name": "CPython",
+    "version": "3.13.18",
+    "build": "3.13.18 (main, Nov  5 2026, 07:59:38) [GCC 14.2.0]"
+   }
+  },
+  "transaction": "/handled",
+  "transaction_info": {
+   "source": "route"
+  },
+  "tags": {
+   "service": "sample-python"
+  },
+  "breadcrumbs": {
+   "values": [
+    {
+     "type": "log",
+     "level": "info",
+     "category": "sample-python",
+     "message": "handling a request that fails with a handled error",
+     "timestamp": "2026-11-15T07:52:59.387305Z",
+     "data": {}
+    },
+    {
+     "category": "app",
+     "message": "about to fail",
+     "level": "info",
+     "timestamp": "2026-11-15T07:52:59.387432Z",
+     "type": "default"
+    }
+   ]
+  },
+  "release": "sample-python@0.1.0",
+  "environment": "development",
+  "sdk": {
+   "name": "sentry.python.fastapi",
+   "version": "2.75.0",
+   "packages": [
+    {
+     "name": "pypi:sentry-sdk",
+     "version": "2.75.0"
+    }
+   ],
+   "integrations": [
+    "argv",
+    "atexit",
+    "dedupe",
+    "excepthook",
+    "fastapi",
+    "logging",
+    "modules",
+    "otlp",
+    "starlette",
+    "stdlib",
+    "threading"
+   ]
+  },
+  "platform": "python"
+ },
+ "stacktrace_md": "# ValueError\nhandled failure (variant vm2-e2e)\n\n### app.py:78 in `handled` [in-app]\n  73 | def handled(variant: str | None = None):\n  74 |     trace_id = format(trace.get_current_span().get_span_context().trace_id, \"032x\")\n  75 |     logger.info(\"handling a request that fails with a handled error\")\n  76 |     sentry_sdk.add_breadcrumb(category=\"app\", message=\"about to fail\", level=\"info\")\n  77 |     try:\n▶ 78 |         raise ValueError(_message(\"handled failure\", variant))\n  79 |     except ValueError as exc:\n  80 |         event_id = sentry_sdk.capture_exception(exc)\n  81 |     return {\"trace_id\": trace_id, \"event_id\": event_id}\n  82 |\n  83 |\n"
+}

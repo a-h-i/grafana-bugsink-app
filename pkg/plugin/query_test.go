@@ -57,8 +57,11 @@ type fakeBugsink struct {
 	eventsStatus   int                 // status of the event list, 0 for success
 	eventRequests  []url.Values
 	lookupRequests []url.Values
-	lookupStatus   int    // status of the event lookup, 0 for success
-	lookupBody     string // body of the event lookup, or empty for a default event
+	lookupStatus   int               // status of the event lookup, 0 for success
+	lookupBody     string            // body of the event lookup, or empty for a default event
+	eventDetails   map[string]string // event detail bodies by event uuid
+	eventStatus    int               // status of the event detail, 0 for success
+	eventError     string            // body of a failing event detail
 	srv            *httptest.Server
 }
 
@@ -123,6 +126,10 @@ func (f *fakeBugsink) serve(w http.ResponseWriter, r *http.Request) {
 	case "/api/canonical/0/events/lookup/":
 		f.serveLookup(w, r)
 	default:
+		if strings.HasPrefix(r.URL.Path, "/api/canonical/0/events/") {
+			f.serveEventDetail(w, r)
+			return
+		}
 		f.serveDetail(w, r)
 	}
 }
@@ -167,6 +174,27 @@ func (f *fakeBugsink) serveLookup(w http.ResponseWriter, r *http.Request) {
 	}
 	if body == "" {
 		body = eventAt(defaultEventID, defaultEventSDKID, defaultIssueUUID, olderThanRange)
+	}
+	_, _ = fmt.Fprint(w, body)
+}
+
+// serveEventDetail answers the detail of one event.
+func (f *fakeBugsink) serveEventDetail(w http.ResponseWriter, r *http.Request) {
+	f.mu.Lock()
+	status, errBody := f.eventStatus, f.eventError
+	f.mu.Unlock()
+	if status != 0 {
+		w.WriteHeader(status)
+		_, _ = fmt.Fprint(w, errBody)
+		return
+	}
+	id := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/api/canonical/0/events/"), "/")
+	f.mu.Lock()
+	body, ok := f.eventDetails[id]
+	f.mu.Unlock()
+	if !ok {
+		w.WriteHeader(http.StatusNotFound)
+		body = `{"detail":"No Event matches the given query."}`
 	}
 	_, _ = fmt.Fprint(w, body)
 }

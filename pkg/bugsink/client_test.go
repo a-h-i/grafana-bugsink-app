@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -256,5 +257,20 @@ func TestAPIErrorListBody(t *testing.T) {
 		if e.Status != 400 || e.Detail != tc.detail {
 			t.Errorf("body %s: got %+v, want detail %q", tc.body, e, tc.detail)
 		}
+	}
+}
+
+func TestDecodeTooLarge(t *testing.T) {
+	respOf := func(body string) *http.Response {
+		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(body))}
+	}
+	padded := func(n int) string { return `{"a":1}` + strings.Repeat(" ", n-len(`{"a":1}`)) }
+
+	var v map[string]int
+	if err := decodeJSON(respOf(padded(maxBodyBytes)), &v); err != nil || v["a"] != 1 {
+		t.Fatalf("exact limit: %v %v", err, v)
+	}
+	if err := decodeJSON(respOf(padded(maxBodyBytes+1)), &v); !errors.Is(err, ErrTooLarge) {
+		t.Fatalf("error = %v, want ErrTooLarge", err)
 	}
 }
