@@ -14,10 +14,11 @@ import (
 type Capability string
 
 const (
-	ProjectsRead Capability = "projects:read"
-	IssuesRead   Capability = "issues:read"
-	EventsRead   Capability = "events:read"
-	IssuesTriage Capability = "issues:triage"
+	ProjectsRead  Capability = "projects:read"
+	IssuesRead    Capability = "issues:read"
+	EventsRead    Capability = "events:read"
+	IssuesTriage  Capability = "issues:triage"
+	IssuesComment Capability = "issues:comment"
 )
 
 var (

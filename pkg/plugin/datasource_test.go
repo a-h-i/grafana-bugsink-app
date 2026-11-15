@@ -5,6 +5,7 @@ package plugin
 import (
 	"context"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -282,16 +283,20 @@ func TestLinkSettingsInHealthCheck(t *testing.T) {
 
 func TestSwitches(t *testing.T) {
 	tests := []struct {
-		name, jsonData string
-		triage, hide   bool
+		name, jsonData            string
+		triage, hide, attribution bool
 	}{
-		{"absent", `{"browserUrl":"http://b"}`, false, false},
-		{"no jsonData", "", false, false},
-		{"triage on", `{"triageEnabled":true}`, true, false},
-		{"triage false", `{"triageEnabled":false}`, false, false},
-		{"triage null", `{"triageEnabled":null}`, false, false},
-		{"hide on", `{"hideStacktraceText":true}`, false, true},
-		{"both on", `{"triageEnabled":true,"hideStacktraceText":true}`, true, true},
+		{"absent", `{"browserUrl":"http://b"}`, false, false, true},
+		{"no jsonData", "", false, false, true},
+		{"triage on", `{"triageEnabled":true}`, true, false, true},
+		{"triage false", `{"triageEnabled":false}`, false, false, true},
+		{"triage null", `{"triageEnabled":null}`, false, false, true},
+		{"hide on", `{"hideStacktraceText":true}`, false, true, true},
+		{"both on", `{"triageEnabled":true,"hideStacktraceText":true}`, true, true, true},
+		{"attribution null", `{"attributionComments":null}`, false, false, true},
+		{"attribution true", `{"attributionComments":true}`, false, false, true},
+		{"attribution false", `{"attributionComments":false}`, false, false, false},
+		{"triage on, attribution false", `{"triageEnabled":true,"attributionComments":false}`, true, false, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -299,8 +304,9 @@ func TestSwitches(t *testing.T) {
 			if ds.settingsErr != "" {
 				t.Fatalf("settingsErr = %q", ds.settingsErr)
 			}
-			if ds.triageEnabled != tt.triage || ds.hideStacktraceText != tt.hide {
-				t.Fatalf("triageEnabled %v hideStacktraceText %v, want %v %v", ds.triageEnabled, ds.hideStacktraceText, tt.triage, tt.hide)
+			if ds.triageEnabled != tt.triage || ds.hideStacktraceText != tt.hide || ds.attribution != tt.attribution {
+				t.Fatalf("triageEnabled %v hideStacktraceText %v attribution %v, want %v %v %v",
+					ds.triageEnabled, ds.hideStacktraceText, ds.attribution, tt.triage, tt.hide, tt.attribution)
 			}
 		})
 	}
@@ -310,14 +316,15 @@ func TestSwitchesOfTheWrongType(t *testing.T) {
 	for _, jsonData := range []string{
 		`{"triageEnabled":"yes"}`, `{"triageEnabled":"true"}`, `{"triageEnabled":1}`, `{"triageEnabled":{}}`,
 		`{"hideStacktraceText":"yes"}`, `{"hideStacktraceText":1}`, `{"hideStacktraceText":[true]}`,
+		`{"attributionComments":"no"}`, `{"attributionComments":"false"}`, `{"attributionComments":0}`, `{"attributionComments":{}}`,
 	} {
 		t.Run(jsonData, func(t *testing.T) {
 			ds := newInstance(t, "http://bugsink.example", secretToken, jsonData)
 			if res := check(t, ds); res.Status != backend.HealthStatusError || res.Message != "The data source settings are invalid." {
 				t.Fatalf("got %v %q", res.Status, res.Message)
 			}
-			if ds.client != nil || ds.triageEnabled || ds.hideStacktraceText {
-				t.Fatalf("client set %v, triageEnabled %v, hideStacktraceText %v", ds.client != nil, ds.triageEnabled, ds.hideStacktraceText)
+			if ds.client != nil || ds.triageEnabled || ds.hideStacktraceText || ds.attribution {
+				t.Fatalf("client set %v, triageEnabled %v, hideStacktraceText %v, attribution %v", ds.client != nil, ds.triageEnabled, ds.hideStacktraceText, ds.attribution)
 			}
 		})
 	}
@@ -363,8 +370,8 @@ func TestCheckHealthTriageEndToEnd(t *testing.T) {
 	}{
 		{"off", "", absent, backend.HealthStatusOk, connected, nil},
 		{"off explicitly", `{"triageEnabled":false}`, absent, backend.HealthStatusOk, connected, nil},
-		{"on, token can triage", `{"triageEnabled":true}`, absent, backend.HealthStatusOk, connected + " The token can triage issues.", []string{probePath}},
-		{"on, token cannot triage", `{"triageEnabled":true}`, lacking, backend.HealthStatusError, "The API token lacks: issues:triage.", []string{probePath}},
+		{"on, token can triage", `{"triageEnabled":true,"attributionComments":false}`, absent, backend.HealthStatusOk, connected + " The token can triage issues.", []string{probePath}},
+		{"on, token cannot triage", `{"triageEnabled":true,"attributionComments":false}`, lacking, backend.HealthStatusError, "The API token lacks: issues:triage.", []string{probePath}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -375,6 +382,81 @@ func TestCheckHealthTriageEndToEnd(t *testing.T) {
 			}
 			if fmt.Sprint(*posts) != fmt.Sprint(tt.posts) {
 				t.Fatalf("POSTs = %v, want %v", *posts, tt.posts)
+			}
+			assertNoToken(t, res)
+		})
+	}
+}
+
+func TestCheckHealthCommentProbeEndToEnd(t *testing.T) {
+	canComment := func(w http.ResponseWriter) {
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = fmt.Fprint(w, `{"issue":["Issue not found."],"comment":["This field may not be blank."]}`)
+	}
+	lacksComment := func(w http.ResponseWriter) {
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = fmt.Fprint(w, `{"detail":"This token does not have the required capability: issues:comment."}`)
+	}
+	noRoute := func(w http.ResponseWriter) {
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = fmt.Fprint(w, `{"detail":"Not found."}`)
+	}
+	accepts := func(w http.ResponseWriter) {
+		w.WriteHeader(http.StatusCreated)
+		_, _ = fmt.Fprint(w, `{"id":1,"issue":"`+absentIssueID+`","comment":""}`)
+	}
+	connected := "Connected to Bugsink. Projects visible to this token: sample-python, sample-js."
+	triageProbe := "POST /api/canonical/0/issues/" + absentIssueID + "/resolve/ "
+	commentProbe := `POST /api/canonical/0/issue-comments/ {"comment":"","issue":"` + absentIssueID + `"}`
+	tests := []struct {
+		name, jsonData string
+		comment        func(http.ResponseWriter)
+		status         backend.HealthStatus
+		message        string
+		posts          []string
+	}{
+		{"triage off", `{"attributionComments":true}`, canComment, backend.HealthStatusOk, connected, nil},
+		{"attribution off", `{"triageEnabled":true,"attributionComments":false}`, canComment,
+			backend.HealthStatusOk, connected + " The token can triage issues.", []string{triageProbe}},
+		{"token can comment", `{"triageEnabled":true}`, canComment,
+			backend.HealthStatusOk, connected + " The token can triage issues. Actions are attributed by a comment.", []string{triageProbe, commentProbe}},
+		{"token lacks issues:comment", `{"triageEnabled":true,"attributionComments":null}`, lacksComment,
+			backend.HealthStatusOk, connected + " The token can triage issues. It lacks issues:comment, so actions are not attributed.", []string{triageProbe, commentProbe}},
+		{"comment route missing", `{"triageEnabled":true}`, noRoute,
+			backend.HealthStatusOk, connected + " The token can triage issues. Bugsink answered HTTP 404 to a check for issues:comment, so actions may not be attributed.", []string{triageProbe, commentProbe}},
+		{"probe accepted", `{"triageEnabled":true}`, accepts,
+			backend.HealthStatusError, "Bugsink answered HTTP 201 to a check for issues:comment.", []string{triageProbe, commentProbe}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var mu sync.Mutex
+			var posts []string
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Method == http.MethodGet {
+					bugsinkHandler(w, r)
+					return
+				}
+				body, _ := io.ReadAll(r.Body)
+				mu.Lock()
+				posts = append(posts, r.Method+" "+r.URL.Path+" "+string(body))
+				mu.Unlock()
+				w.Header().Set("Content-Type", "application/json")
+				if r.URL.Path == "/api/canonical/0/issue-comments/" {
+					tt.comment(w)
+					return
+				}
+				w.WriteHeader(http.StatusNotFound)
+				_, _ = fmt.Fprint(w, `{"detail":"No Issue matches the given query."}`)
+			}))
+			t.Cleanup(srv.Close)
+			res := check(t, newInstance(t, srv.URL, secretToken, tt.jsonData))
+			if res.Status != tt.status || res.Message != tt.message {
+				t.Fatalf("got %v %q\nwant %v %q", res.Status, res.Message, tt.status, tt.message)
+			}
+			mu.Lock()
+			defer mu.Unlock()
+			if fmt.Sprint(posts) != fmt.Sprint(tt.posts) {
+				t.Fatalf("requests = %q, want %q", posts, tt.posts)
 			}
 			assertNoToken(t, res)
 		})

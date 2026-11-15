@@ -5,7 +5,15 @@ import { HistoryEntry } from '../../datasource/types';
 import { IssueHistory } from './IssueHistory';
 
 function entry(overrides: Partial<HistoryEntry> = {}): HistoryEntry {
-  return { id: 1, kind: 'muted', timestamp: '2026-11-15T05:45:33Z', user: null, comment: '', ...overrides };
+  return {
+    id: 1,
+    kind: 'muted',
+    timestamp: '2026-11-15T05:45:33Z',
+    user: null,
+    comment: '',
+    details: {},
+    ...overrides,
+  };
 }
 
 function renderHistory(history: HistoryEntry[], truncated = false) {
@@ -29,6 +37,37 @@ describe('IssueHistory', () => {
     for (const label of Object.values(labels)) {
       expect(screen.getByText(label)).toBeInTheDocument();
     }
+  });
+
+  it('describes what a mute, a resolve and an unmute carry', () => {
+    renderHistory([
+      entry({ id: 1, details: { period: 'day', periods: 2, unmuteAfter: '2026-11-17T05:45:33Z' } }),
+      entry({ id: 2, details: { threshold: 5, period: 'hour', periods: 1 } }),
+      entry({ id: 3, kind: 'resolved', details: { release: 'r1' } }),
+      entry({ id: 4, kind: 'resolved', details: { nextRelease: true } }),
+      entry({ id: 5, kind: 'unmuted', details: { threshold: 5, period: 'hour', periods: 1 } }),
+      entry({ id: 6, kind: 'next_materialized', details: { release: 'r1' } }),
+    ]);
+
+    expect(screen.getByText('Muted for 2 days, until 2026-11-17 05:45:33')).toBeInTheDocument();
+    expect(screen.getByText('Muted until 5 or more events in 1 hour')).toBeInTheDocument();
+    expect(screen.getByText('Resolved in release r1')).toBeInTheDocument();
+    expect(screen.getByText('Resolved in the next release')).toBeInTheDocument();
+    expect(screen.getByText('Unmuted after 5 or more events in 1 hour')).toBeInTheDocument();
+    expect(screen.getByText('Resolved in the next release: r1')).toBeInTheDocument();
+  });
+
+  it('shows a release as text, never as markup', () => {
+    renderHistory([entry({ kind: 'resolved', details: { release: '<b>r1</b>' } })]);
+
+    expect(screen.getByText('Resolved in release <b>r1</b>')).toBeInTheDocument();
+    expect(document.querySelector('b')).toBeNull();
+  });
+
+  it('keeps the author after the details', () => {
+    renderHistory([entry({ kind: 'resolved', user: 'Ada', details: { release: 'r1' } })]);
+
+    expect(screen.getByText('Resolved in release r1 by Ada')).toBeInTheDocument();
   });
 
   it('shows an unknown kind as written', () => {

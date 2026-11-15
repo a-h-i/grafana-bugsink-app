@@ -12,7 +12,7 @@ import {
 import { config, DataSourceWithBackend, setTemplateSrv } from '@grafana/runtime';
 import { lastValueFrom, of } from 'rxjs';
 import { BugsinkDataSource } from './datasource';
-import { BugsinkOptions, DEFAULT_QUERY } from './types';
+import { BugsinkOptions, DEFAULT_QUERY, MuteTerms } from './types';
 
 const settings = { uid: 'bugsink', name: 'Bugsink', jsonData: {} } as DataSourceInstanceSettings<BugsinkOptions>;
 
@@ -117,6 +117,89 @@ describe('BugsinkDataSource', () => {
 
       await expect(ds.triage(id, 'mute')).rejects.toThrow(`"${id}" is not an issue id.`);
       expect(postResource).not.toHaveBeenCalled();
+    });
+
+    it.each(['resolve', 'reopen', 'mute', 'unmute', 'resolve-latest', 'resolve-next'] as const)(
+      'posts %s without data, even when terms are given',
+      async (action) => {
+        const ds = createDataSource();
+        const postResource = jest.spyOn(ds, 'postResource').mockResolvedValue({ id: ID });
+
+        await ds.triage(ID, action, { period: 'day', periods: 2 });
+
+        expect(postResource).toHaveBeenCalledWith(`issues/${ID}/${action}`, undefined, {
+          showErrorAlert: false,
+          headers: { 'X-Bugsink-Triage': '1' },
+        });
+      }
+    );
+
+    it('posts mute-for with exactly the period and the number of periods', async () => {
+      const ds = createDataSource();
+      const postResource = jest.spyOn(ds, 'postResource').mockResolvedValue({ id: ID, status: 'muted' });
+
+      await expect(ds.triage(ID, 'mute-for', { period: 'day', periods: 2 })).resolves.toEqual({
+        id: ID,
+        status: 'muted',
+      });
+      expect(postResource).toHaveBeenCalledWith(
+        `issues/${ID}/mute-for`,
+        { period: 'day', periods: 2 },
+        { showErrorAlert: false, headers: { 'X-Bugsink-Triage': '1' } }
+      );
+    });
+
+    it('posts mute-until with the threshold', async () => {
+      const ds = createDataSource();
+      const postResource = jest.spyOn(ds, 'postResource').mockResolvedValue({ id: ID });
+
+      await ds.triage(ID, 'mute-until', { period: 'hour', periods: 1, threshold: 10 });
+
+      expect(postResource).toHaveBeenCalledWith(
+        `issues/${ID}/mute-until`,
+        { period: 'hour', periods: 1, threshold: 10 },
+        { showErrorAlert: false, headers: { 'X-Bugsink-Triage': '1' } }
+      );
+    });
+
+    it('sends only the terms of the action and nothing else from the form', async () => {
+      const ds = createDataSource();
+      const postResource = jest.spyOn(ds, 'postResource').mockResolvedValue({ id: ID });
+      const form = { period: 'week', periods: 3, threshold: 50, issue: 'other', note: 'x' } as MuteTerms;
+
+      await ds.triage(ID, 'mute-for', form);
+      await ds.triage(ID, 'mute-until', form);
+
+      expect(postResource.mock.calls.map((call) => call[1])).toEqual([
+        { period: 'week', periods: 3 },
+        { period: 'week', periods: 3, threshold: 50 },
+      ]);
+    });
+
+    it.each([
+      ['mute-for', undefined, 'The request body must be a JSON object with period and periods.'],
+      ['mute-until', undefined, 'The request body must be a JSON object with period, periods and threshold.'],
+      ['mute-for', { period: 'day', periods: 0 }, 'The number of periods must be a whole number from 1 to 100.'],
+      [
+        'mute-until',
+        { period: 'day', periods: 1, threshold: 0 },
+        'The threshold must be a whole number from 1 to 1000000.',
+      ],
+    ] as const)('rejects %s with %j without a request', async (action, terms, message) => {
+      const ds = createDataSource();
+      const postResource = jest.spyOn(ds, 'postResource').mockResolvedValue({});
+
+      await expect(ds.triage(ID, action, terms)).rejects.toThrow(message);
+      expect(postResource).not.toHaveBeenCalled();
+    });
+
+    it('keeps the warning of the answer', async () => {
+      const ds = createDataSource();
+      const warning =
+        'The action succeeded, but the attribution comment was not written: The API token lacks issues:comment.';
+      jest.spyOn(ds, 'postResource').mockResolvedValue({ id: ID, status: 'resolved', warning });
+
+      await expect(ds.triage(ID, 'resolve-next')).resolves.toEqual({ id: ID, status: 'resolved', warning });
     });
 
     describe('canTriage', () => {

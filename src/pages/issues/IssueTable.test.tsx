@@ -26,7 +26,11 @@ function row(overrides: Partial<IssueRow> = {}): IssueRow {
 
 const issueHref = (r: IssueRow) => `/a/app/issues/${r.id}?ds=x`;
 
-type Triage = { busyIds?: ReadonlySet<string>; onAction: (row: IssueRow, action: TriageAction) => void };
+type Triage = {
+  busyIds?: ReadonlySet<string>;
+  disabled?: boolean;
+  onAction: (row: IssueRow, action: TriageAction) => void;
+};
 
 function renderTable(rows: IssueRow[], triage?: Triage) {
   return render(
@@ -164,5 +168,16 @@ describe('IssueTable', () => {
     expect(screen.getByRole('button', { name: 'Resolve SAMPLE-PYTHON-2' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Resolve SAMPLE-PYTHON-3' })).toBeEnabled();
     expect(screen.getByRole('button', { name: 'Resolve SAMPLE-PYTHON-4' })).toBeDisabled();
+  });
+
+  it('disables every button when the table is disabled', () => {
+    renderTable([row({ id: '1', friendlyId: 'SAMPLE-PYTHON-2' }), row({ id: '2', friendlyId: 'SAMPLE-PYTHON-3' })], {
+      disabled: true,
+      onAction: jest.fn(),
+    });
+
+    for (const button of screen.getAllByRole('button', { name: /^(Resolve|Mute) / })) {
+      expect(button).toBeDisabled();
+    }
   });
 });

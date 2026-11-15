@@ -170,6 +170,18 @@ export function ConfigEditor({ options, onOptionsChange }: Props) {
           onChange={(event) => setJsonData({ triageEnabled: event.currentTarget.checked })}
         />
       </Field>
+      <Field
+        label="Attribution comments"
+        description="After each action, add a comment to the issue in Bugsink naming the Grafana login and the action. Everyone who can see the issue in Bugsink can read it. The API token needs issues:comment."
+        htmlFor="bugsink-attribution"
+      >
+        <Switch
+          id="bugsink-attribution"
+          aria-label="Attribution comments"
+          value={jsonData.attributionComments !== false}
+          onChange={(event) => setJsonData({ attributionComments: event.currentTarget.checked })}
+        />
+      </Field>
       <h3 className="page-heading">Privacy</h3>
       <Field
         label="Hide stack trace text"

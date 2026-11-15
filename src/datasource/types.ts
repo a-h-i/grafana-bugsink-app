@@ -34,9 +34,23 @@ export interface BugsinkOptions extends DataSourceJsonData {
   serviceTag?: string;
   triageEnabled?: boolean;
   hideStacktraceText?: boolean;
+  attributionComments?: boolean;
 }
 
-export type TriageAction = 'resolve' | 'reopen' | 'mute' | 'unmute';
+export type TriageAction =
+  'resolve' | 'reopen' | 'mute' | 'unmute' | 'resolve-latest' | 'resolve-next' | 'mute-for' | 'mute-until';
+
+export type MuteAction = 'mute-for' | 'mute-until';
+
+export type Period = 'minute' | 'hour' | 'day' | 'week' | 'month' | 'year';
+
+export const PERIODS: Period[] = ['minute', 'hour', 'day', 'week', 'month', 'year'];
+
+export interface MuteTerms {
+  period: Period;
+  periods: number;
+  threshold?: number;
+}
 
 export interface ExploreLink {
   title: string;
@@ -115,6 +129,10 @@ export interface IssueDetail {
   bugsinkUrl: string;
 }
 
+export interface TriageResult extends IssueDetail {
+  warning?: string;
+}
+
 export interface IssueTag {
   key: string;
   values: Array<{ value: string; count: number }>;
@@ -132,6 +150,16 @@ export interface HistoryEntry {
   timestamp: string;
   user: string | null;
   comment: string;
+  details: HistoryDetails;
+}
+
+export interface HistoryDetails {
+  release?: string;
+  nextRelease?: boolean;
+  period?: Period;
+  periods?: number;
+  threshold?: number;
+  unmuteAfter?: string;
 }
 
 export interface IssueHistory {

@@ -161,7 +161,7 @@ Built; see [`plans/m7-basic-triage.md`](plans/m7-basic-triage.md). Triage runs o
 routes of the data source, which need the header `X-Bugsink-Triage: 1`.
 
 * **Scope:** resource routes for resolve, reopen, mute and unmute; the caller check in the backend (org role
-  exactly Editor or Admin, anonymous sessions and service accounts by their role, fixed until M8); the `Triage`
+  exactly Editor or Admin, anonymous sessions and service accounts by their role); the `Triage`
   switch per data source, off by default; the required triage header; the health check probe for
   `issues:triage`; inline Resolve and Mute on the issue list; the actions for the issue's state under the
   summary of the issue page; state shown from the issue Bugsink returns; the `Hide stack trace text` switch;
@@ -174,11 +174,21 @@ routes of the data source, which need the header `X-Bugsink-Triage: 1`.
 
 ### M8: Full triage
 
-* **Scope:** resolve in latest and next release; mute for a period and until a volume threshold, with
-  their forms; attribution comment when the token has `issues:comment` (on by default, can be switched off); Grafana RBAC
-  plugin actions where available.
-* **Demo:** mute an issue for two days, resolve another in the next release, and see a comment in Bugsink
-  naming the Grafana user for each.
+Built; see [`plans/m8-full-triage.md`](plans/m8-full-triage.md). Grafana RBAC plugin actions are not built: a backend
+plugin on Grafana OSS cannot check an action for the caller without extra feature toggles, so the org role stays the rule.
+
+* **Scope:** resource routes for resolve in the latest and the next release, mute for a period and mute until a
+  volume threshold, beside the M7 four, with a strict body check on the two mute routes; the mute forms on the
+  issue page, running the backend's rules live; an attribution comment after every successful action, naming the
+  Grafana login in quotes (`an anonymous user` for anonymous access), switched per data source with
+  `Attribution comments` (on by default) and needing `issues:comment`; a failed comment as a warning on the
+  200 answer, with the action standing; the health check probe for `issues:comment`, free of side effects;
+  History details from Bugsink's `metadata`; on the issue list, actions disabled while the list reloads and one
+  message per list load, dropped when the page leaves it; the role and the comment status in the triage log line.
+* **Demo:** as an Editor on the provisioned `Bugsink triage` data source (attribution on by default), mute an
+  issue for two days and resolve another in the next release from the issue page, and see in Bugsink and in
+  the History section a comment `... from Grafana by "m7-editor".` for each; also mute until a threshold and
+  resolve in the latest release; a mute body with a string number is refused. Runs as an e2e test.
 
 ### M9: Event volume series
 

@@ -103,7 +103,9 @@ test.describe('connecting a Bugsink data source', () => {
     const configPage = await saveAndTest(createDataSourceConfigPage, page, BUGSINK_URL, TRIAGE);
     await page.getByRole('switch', { name: /Triage/i }).check({ force: true });
     await expect(configPage.saveAndTest()).toBeOK();
-    await expect(configPage).toHaveAlert('success', { hasText: 'The token can triage issues.' });
+    await expect(configPage).toHaveAlert('success', {
+      hasText: 'The token can triage issues. Actions are attributed by a comment.',
+    });
   });
 
   test('provisioned data source', async ({ gotoDataSourceConfigPage, page }) => {

@@ -8,14 +8,18 @@ export const ACTION_LABELS: Record<TriageAction, string> = {
   reopen: 'Reopen',
   mute: 'Mute',
   unmute: 'Unmute',
+  'resolve-latest': 'Resolve in latest release',
+  'resolve-next': 'Resolve in next release',
+  'mute-for': 'Mute for a period',
+  'mute-until': 'Mute until a threshold',
 };
 
 export function triageActions(status: IssueStatus): TriageAction[] {
   switch (status) {
     case 'open':
-      return ['resolve', 'mute'];
+      return ['resolve', 'resolve-latest', 'resolve-next', 'mute', 'mute-for', 'mute-until'];
     case 'muted':
-      return ['resolve', 'unmute'];
+      return ['resolve', 'resolve-latest', 'resolve-next', 'unmute'];
     case 'resolved':
       return ['reopen'];
   }

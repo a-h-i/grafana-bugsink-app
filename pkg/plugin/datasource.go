@@ -26,6 +26,7 @@ type Datasource struct {
 	browserURL         string // base of links to Bugsink's pages, no trailing slash
 	links              linkSettings
 	triageEnabled      bool
+	attribution        bool // add an attribution comment after each triage action
 	hideStacktraceText bool
 	healthTimeout      time.Duration
 	issueCache         *cache[bugsink.IssueList]
@@ -86,9 +87,10 @@ func (d *Datasource) configure(ctx context.Context, s backend.DataSourceInstance
 		return msgSettingsInvalid
 	}
 	var jsonData struct {
-		BrowserURL         string `json:"browserUrl"`
-		TriageEnabled      bool   `json:"triageEnabled"`
-		HideStacktraceText bool   `json:"hideStacktraceText"`
+		BrowserURL          string `json:"browserUrl"`
+		TriageEnabled       bool   `json:"triageEnabled"`
+		HideStacktraceText  bool   `json:"hideStacktraceText"`
+		AttributionComments *bool  `json:"attributionComments"`
 	}
 	if len(s.JSONData) > 0 && json.Unmarshal(s.JSONData, &jsonData) != nil {
 		return msgSettingsInvalid
@@ -111,6 +113,7 @@ func (d *Datasource) configure(ctx context.Context, s backend.DataSourceInstance
 	d.links = links
 	d.triageEnabled = jsonData.TriageEnabled
 	d.hideStacktraceText = jsonData.HideStacktraceText
+	d.attribution = jsonData.AttributionComments == nil || *jsonData.AttributionComments
 	d.client = client
 	return ""
 }
@@ -129,5 +132,5 @@ func (d *Datasource) CheckHealth(ctx context.Context, _ *backend.CheckHealthRequ
 	}
 	ctx, cancel := context.WithTimeout(ctx, d.healthTimeout)
 	defer cancel()
-	return checkHealth(ctx, d.url, d.healthTimeout, d.client, d.triageEnabled), nil
+	return checkHealth(ctx, d.url, d.healthTimeout, d.client, d.triageEnabled, d.attribution), nil
 }

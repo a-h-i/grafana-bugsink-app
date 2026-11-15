@@ -280,6 +280,49 @@ func TestIssueHistoryResourceEmpty(t *testing.T) {
 	}
 }
 
+func TestHistoryDetails(t *testing.T) {
+	f := newFakeBugsink(t)
+	entry := func(id int, metadata string) string {
+		return fmt.Sprintf(`{"id":%d,"kind":"x","timestamp":"2026-05-02T10:00:00Z","user_display_name":null,"comment":"","metadata":%s}`, id, metadata)
+	}
+	f.historyBody = strings.Join([]string{
+		entry(1, `{"mute_for":{"period_name":"day","nr_of_periods":2,"unmute_after":"2026-05-04T10:00:00+00:00"}}`),
+		entry(2, `{}`),
+		entry(3, `{"mute_until":{"period_name":"hour","nr_of_periods":1,"gte_threshold":"5"}}`),
+		entry(4, `{"resolved_release":"m5-probe@0"}`),
+		entry(5, `{"resolve_by_next":true}`),
+		entry(6, `{"secret":"raw","resolved_unconditionally":true}`),
+		entry(7, `null`),
+	}, ",")
+	r := callResource(t, resourceDatasource(t, f), "GET", "issues/SAMPLE-PYTHON-2/history")
+	var body struct {
+		History []struct {
+			ID      int            `json:"id"`
+			Details map[string]any `json:"details"`
+		} `json:"history"`
+	}
+	if err := json.Unmarshal([]byte(r.body), &body); err != nil || r.status != 200 || len(body.History) != 7 {
+		t.Fatalf("status %d body %s err %v", r.status, r.body, err)
+	}
+	want := []map[string]any{
+		{"period": "day", "periods": float64(2), "unmuteAfter": "2026-05-04T10:00:00Z"},
+		{},
+		{"period": "hour", "periods": float64(1), "threshold": float64(5)},
+		{"release": "m5-probe@0"},
+		{"nextRelease": true},
+		{},
+		{},
+	}
+	for i, e := range body.History {
+		if e.Details == nil || !reflect.DeepEqual(e.Details, want[i]) {
+			t.Fatalf("entry %d details %v, want %v", e.ID, e.Details, want[i])
+		}
+	}
+	if strings.Contains(r.body, "secret") || strings.Contains(r.body, "metadata") || strings.Contains(r.body, "unconditionally") {
+		t.Fatalf("raw metadata in %s", r.body)
+	}
+}
+
 func TestIssueRoutesRejectBadIDs(t *testing.T) {
 	cases := []struct {
 		path    string

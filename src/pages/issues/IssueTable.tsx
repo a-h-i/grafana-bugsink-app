@@ -15,7 +15,11 @@ interface IssueTableProps {
   rows: IssueRow[];
   timeZone: TimeZone;
   issueHref: (row: IssueRow) => string;
-  triage?: { busyIds?: ReadonlySet<string>; onAction: (row: IssueRow, action: TriageAction) => void };
+  triage?: {
+    busyIds?: ReadonlySet<string>;
+    disabled?: boolean;
+    onAction: (row: IssueRow, action: TriageAction) => void;
+  };
 }
 
 export function IssueTable({ rows, timeZone, issueHref, triage }: IssueTableProps): React.JSX.Element {
@@ -62,7 +66,7 @@ export function IssueTable({ rows, timeZone, issueHref, triage }: IssueTableProp
       cell: ({ row }: CellProps<IssueRow>) => (
         <TriageButtons
           actions={triageActions(row.original.status).filter((action) => LIST_ACTIONS.includes(action))}
-          busy={triage.busyIds?.has(row.original.id) ?? false}
+          busy={triage.disabled || (triage.busyIds?.has(row.original.id) ?? false)}
           name={(action) => `${ACTION_LABELS[action]} ${row.original.friendlyId}`}
           onAction={(action) => triage.onAction(row.original, action)}
         />

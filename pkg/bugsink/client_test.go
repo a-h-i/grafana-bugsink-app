@@ -189,7 +189,15 @@ func TestNeverFollowsRedirects(t *testing.T) {
 	calls := map[string]func(c *Client) error{
 		"GET": func(c *Client) error { _, err := c.ListProjects(context.Background()); return err },
 		"triage POST": func(c *Client) error {
-			_, err := c.Triage(context.Background(), "SAMPLE-PYTHON-7", Resolve)
+			_, err := c.Triage(context.Background(), "SAMPLE-PYTHON-7", Resolve, MuteTerms{})
+			return err
+		},
+		"mute POST": func(c *Client) error {
+			_, err := c.Triage(context.Background(), "SAMPLE-PYTHON-7", MuteFor, MuteTerms{PeriodDay, 1, 0})
+			return err
+		},
+		"comment POST": func(c *Client) error {
+			_, err := c.AddComment(context.Background(), "SAMPLE-PYTHON-7", "Muted from Grafana by a.")
 			return err
 		},
 	}

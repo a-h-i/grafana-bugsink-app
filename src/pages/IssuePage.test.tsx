@@ -75,7 +75,14 @@ const TAGS = {
 };
 const HISTORY = {
   history: [
-    { id: 1, kind: 'manual_annotation', timestamp: '2026-11-15T05:45:33Z', user: null, comment: 'm4 plan probe' },
+    {
+      id: 1,
+      kind: 'manual_annotation',
+      timestamp: '2026-11-15T05:45:33Z',
+      user: null,
+      comment: 'm4 plan probe',
+      details: {},
+    },
   ],
   truncated: false,
 };
@@ -364,13 +371,32 @@ describe('IssuePage', () => {
   describe('triage actions', () => {
     const PATH = '/a/ahmedismail-bugsink-app/issues/SAMPLE-PYTHON-2';
     const actionNames = () => screen.queryAllByRole('button').map((b) => b.textContent);
-    const triageNames = ['Resolve', 'Reopen', 'Mute', 'Unmute'];
+    const triageNames = [
+      'Resolve',
+      'Reopen',
+      'Mute',
+      'Unmute',
+      'Resolve in latest release',
+      'Resolve in next release',
+      'Mute for a period',
+      'Mute until a threshold',
+    ];
     const shown = () => actionNames().filter((name) => triageNames.includes(name ?? ''));
 
     it('triage buttons follow the state', async () => {
       const cases: Array<[IssueDetail['status'], string[]]> = [
-        ['open', ['Resolve', 'Mute']],
-        ['muted', ['Resolve', 'Unmute']],
+        [
+          'open',
+          [
+            'Resolve',
+            'Resolve in latest release',
+            'Resolve in next release',
+            'Mute',
+            'Mute for a period',
+            'Mute until a threshold',
+          ],
+        ],
+        ['muted', ['Resolve', 'Resolve in latest release', 'Resolve in next release', 'Unmute']],
         ['resolved', ['Reopen']],
       ];
       for (const [status, names] of cases) {
@@ -395,7 +421,7 @@ describe('IssuePage', () => {
 
       fireEvent.click(screen.getByRole('button', { name: 'Reopen' }));
 
-      expect(mockSources.bugsink.triage).toHaveBeenCalledWith('uuid-1', 'reopen');
+      expect(mockSources.bugsink.triage).toHaveBeenCalledWith('uuid-1', 'reopen', undefined);
       expect(screen.getByRole('button', { name: 'Reopen' })).toBeDisabled();
       await act(async () => answer({ ...ISSUE, status: 'open' }));
 
@@ -403,7 +429,8 @@ describe('IssuePage', () => {
       expect(screen.queryByText('Resolved')).not.toBeInTheDocument();
       expect(mockSources.bugsink.getIssue).toHaveBeenCalledTimes(1);
       await waitFor(() => expect(mockSources.bugsink.getIssueHistory).toHaveBeenCalledTimes(2));
-      expect(shown()).toEqual(['Resolve', 'Mute']);
+      expect(shown()).toContain('Mute');
+      expect(shown()).not.toContain('Reopen');
     });
 
     it('a failed action reads the issue again', async () => {
@@ -469,6 +496,7 @@ describe('IssuePage', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Resolve' }));
         await act(async () => fireEvent.click(screen.getByTestId('data-testid RefreshPicker run button')));
         await waitFor(() => expect(mockSources.bugsink.getIssue).toHaveBeenCalledTimes(2));
+        expect(spinning()).toBe(true);
       });
 
       it('a read that lands after the answer does not overwrite it', async () => {
@@ -491,6 +519,133 @@ describe('IssuePage', () => {
         expect(await screen.findByText('Resolved')).toBeInTheDocument();
         await waitFor(() => expect(spinning()).toBe(false));
       });
+    });
+
+    it('a timed mute sends its terms', async () => {
+      mockSources.bugsink.triage.mockResolvedValue({ ...ISSUE, status: 'muted' });
+      renderPage(`${PATH}?ds=bugsink`);
+      await screen.findByText('LookupError: failure');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Mute for a period' }));
+      fireEvent.change(screen.getByLabelText('Number of periods'), { target: { value: '2' } });
+      fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Mute' }));
+
+      expect(mockSources.bugsink.triage).toHaveBeenCalledWith('uuid-1', 'mute-for', { period: 'day', periods: 2 });
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+      expect(await screen.findByText('Muted')).toBeInTheDocument();
+    });
+
+    it('does not send an invalid form', async () => {
+      renderPage(`${PATH}?ds=bugsink`);
+      await screen.findByText('LookupError: failure');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Mute for a period' }));
+      fireEvent.change(screen.getByLabelText('Number of periods'), { target: { value: '0' } });
+      fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Mute' }));
+
+      expect(mockSources.bugsink.triage).not.toHaveBeenCalled();
+    });
+
+    it('a release resolve', async () => {
+      mockSources.bugsink.triage.mockResolvedValue({ ...ISSUE, status: 'resolved' });
+      renderPage(`${PATH}?ds=bugsink`);
+      await screen.findByText('LookupError: failure');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Resolve in next release' }));
+
+      expect(mockSources.bugsink.triage).toHaveBeenCalledWith('uuid-1', 'resolve-next', undefined);
+      expect(await screen.findByText('Resolved')).toBeInTheDocument();
+    });
+
+    it('a warning shows under the buttons', async () => {
+      mockSources.bugsink.triage.mockResolvedValue({ ...ISSUE, status: 'resolved', warning: 'W' });
+      renderPage(`${PATH}?ds=bugsink`);
+      await screen.findByText('LookupError: failure');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Resolve' }));
+
+      expect(await screen.findByText('Resolved')).toBeInTheDocument();
+      expect(screen.getByText('W')).toBeInTheDocument();
+      expect(screen.getByTestId('data-testid Alert warning')).toHaveTextContent('W');
+    });
+
+    it('the notice belongs to its issue and data source', async () => {
+      mockSources.bugsink.triage.mockRejectedValue({ data: { message: 'refused' } });
+      mockSources.bugsink.getIssue.mockImplementation((id: string) =>
+        Promise.resolve(id === 'X-2' ? { ...ISSUE, friendlyId: 'X-2', message: 'second' } : ISSUE)
+      );
+      function Jump() {
+        const navigate = useNavigate();
+        return (
+          <>
+            <button onClick={() => navigate('/a/ahmedismail-bugsink-app/issues/X-2?ds=bugsink')}>second</button>
+            <button onClick={() => navigate('/a/ahmedismail-bugsink-app/issues/X-1?ds=bugsink')}>first</button>
+            <button onClick={() => navigate('/a/ahmedismail-bugsink-app/issues/X-1?ds=eu')}>other</button>
+          </>
+        );
+      }
+      render(
+        <MemoryRouter
+          initialEntries={['/a/ahmedismail-bugsink-app/issues/X-1?ds=bugsink']}
+          future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+        >
+          <Routes>
+            <Route path="/a/ahmedismail-bugsink-app/issues/:issueId" element={<IssuePage />} />
+          </Routes>
+          <Jump />
+        </MemoryRouter>
+      );
+      await screen.findByText('LookupError: failure');
+      fireEvent.click(screen.getByRole('button', { name: 'Resolve' }));
+      expect(await screen.findByText('refused')).toBeInTheDocument();
+
+      fireEvent.click(screen.getByText('second'));
+      expect(await screen.findByText('LookupError: second')).toBeInTheDocument();
+      expect(screen.queryByText('refused')).not.toBeInTheDocument();
+
+      fireEvent.click(screen.getByText('first'));
+      expect(await screen.findByText('refused')).toBeInTheDocument();
+
+      fireEvent.click(screen.getByText('other'));
+      await waitFor(() => expect(mockGet).toHaveBeenCalledWith('eu'));
+      await waitFor(() => expect(screen.queryByText('refused')).not.toBeInTheDocument());
+    });
+
+    it('an open form closes when the page leaves its issue', async () => {
+      mockSources.bugsink.getIssue.mockImplementation((id: string) =>
+        Promise.resolve(id === 'X-2' ? { ...ISSUE, friendlyId: 'X-2', message: 'second' } : ISSUE)
+      );
+      function Jump() {
+        const navigate = useNavigate();
+        return (
+          <>
+            <button onClick={() => navigate('/a/ahmedismail-bugsink-app/issues/X-2?ds=bugsink')}>second</button>
+            <button onClick={() => navigate('/a/ahmedismail-bugsink-app/issues/X-1?ds=bugsink')}>first</button>
+          </>
+        );
+      }
+      render(
+        <MemoryRouter
+          initialEntries={['/a/ahmedismail-bugsink-app/issues/X-1?ds=bugsink']}
+          future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+        >
+          <Routes>
+            <Route path="/a/ahmedismail-bugsink-app/issues/:issueId" element={<IssuePage />} />
+          </Routes>
+          <Jump />
+        </MemoryRouter>
+      );
+      await screen.findByText('LookupError: failure');
+      fireEvent.click(screen.getByRole('button', { name: 'Mute for a period' }));
+      expect(screen.getByRole('dialog')).toBeInTheDocument();
+
+      fireEvent.click(screen.getByText('second'));
+      expect(await screen.findByText('LookupError: second')).toBeInTheDocument();
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+
+      fireEvent.click(screen.getByText('first'));
+      expect(await screen.findByText('LookupError: failure')).toBeInTheDocument();
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     });
 
     it('keeps the Event section mounted across an action', async () => {

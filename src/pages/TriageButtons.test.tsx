@@ -5,8 +5,15 @@ import { TriageButtons, triageActions } from './TriageButtons';
 
 describe('triageActions', () => {
   it('offers the actions the status allows', () => {
-    expect(triageActions('open')).toEqual(['resolve', 'mute']);
-    expect(triageActions('muted')).toEqual(['resolve', 'unmute']);
+    expect(triageActions('open')).toEqual([
+      'resolve',
+      'resolve-latest',
+      'resolve-next',
+      'mute',
+      'mute-for',
+      'mute-until',
+    ]);
+    expect(triageActions('muted')).toEqual(['resolve', 'resolve-latest', 'resolve-next', 'unmute']);
     expect(triageActions('resolved')).toEqual(['reopen']);
   });
 });

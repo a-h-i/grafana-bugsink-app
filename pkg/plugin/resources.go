@@ -56,7 +56,10 @@ func (d *Datasource) routes() *http.ServeMux {
 	get("/issues/{id}/tags", d.handleIssueTags)
 	get("/issues/{id}/history", d.handleIssueHistory)
 	get("/events/{id}", d.handleEvent)
-	for _, action := range []bugsink.TriageAction{bugsink.Resolve, bugsink.Reopen, bugsink.Mute, bugsink.Unmute} {
+	for _, action := range []bugsink.TriageAction{
+		bugsink.Resolve, bugsink.ResolveLatest, bugsink.ResolveNext, bugsink.Reopen,
+		bugsink.Mute, bugsink.MuteFor, bugsink.MuteUntil, bugsink.Unmute,
+	} {
 		post("/issues/{id}/"+string(action), d.handleTriage(action))
 	}
 	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
@@ -259,11 +262,32 @@ func (d *Datasource) handleIssueTags(w http.ResponseWriter, r *http.Request) {
 }
 
 type historyEntry struct {
-	ID        int       `json:"id"`
-	Kind      string    `json:"kind"`
-	Timestamp time.Time `json:"timestamp"`
-	User      *string   `json:"user"`
-	Comment   string    `json:"comment"`
+	ID        int            `json:"id"`
+	Kind      string         `json:"kind"`
+	Timestamp time.Time      `json:"timestamp"`
+	User      *string        `json:"user"`
+	Comment   string         `json:"comment"`
+	Details   historyDetails `json:"details"`
+}
+
+type historyDetails struct {
+	Release     string     `json:"release,omitempty"`
+	NextRelease bool       `json:"nextRelease,omitempty"`
+	Period      string     `json:"period,omitempty"`
+	Periods     int        `json:"periods,omitempty"`
+	Threshold   int        `json:"threshold,omitempty"`
+	UnmuteAfter *time.Time `json:"unmuteAfter,omitempty"`
+}
+
+func historyDetailsJSON(d bugsink.TurningPointDetails) historyDetails {
+	return historyDetails{
+		Release:     d.Release,
+		NextRelease: d.NextRelease,
+		Period:      string(d.Period),
+		Periods:     d.Periods,
+		Threshold:   d.Threshold,
+		UnmuteAfter: d.UnmuteAfter,
+	}
 }
 
 func (d *Datasource) handleIssueHistory(w http.ResponseWriter, r *http.Request) {
@@ -278,7 +302,7 @@ func (d *Datasource) handleIssueHistory(w http.ResponseWriter, r *http.Request) 
 	}
 	entries := make([]historyEntry, 0, len(h.Entries))
 	for _, e := range h.Entries {
-		entry := historyEntry{ID: e.ID, Kind: e.Kind, Timestamp: e.Timestamp, Comment: e.Comment}
+		entry := historyEntry{ID: e.ID, Kind: e.Kind, Timestamp: e.Timestamp, Comment: e.Comment, Details: historyDetailsJSON(e.Details)}
 		if e.User != "" {
 			entry.User = &e.User
 		}

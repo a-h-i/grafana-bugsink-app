@@ -9,7 +9,8 @@ import { EventTable } from './issue/EventTable';
 import { IssueHistory } from './issue/IssueHistory';
 import { IssueSummary } from './issue/IssueSummary';
 import { IssueTags } from './issue/IssueTags';
-import { TriageAction } from '../datasource/types';
+import { MuteAction, MuteTerms, TriageAction } from '../datasource/types';
+import { MuteForm } from './MuteForm';
 import { NoDataSource } from './NoDataSource';
 import { issuePath, listPath, withEvent } from './routes';
 import { TriageButtons, triageActions } from './TriageButtons';
@@ -157,38 +158,61 @@ export function IssuePage(): React.JSX.Element {
   const pending = summary.pending || tags.pending || history.pending || events.pending || event.pending;
 
   const [acting, setActing] = useState<string>();
-  const [failure, setFailure] = useState<{ issueId: string; message: string }>();
+  const [notice, setNotice] = useState<{
+    source: BugsinkDataSource;
+    issueId: string;
+    severity: 'error' | 'warning';
+    message: string;
+  }>();
+  const [form, setForm] = useState<{ source: BugsinkDataSource; issueId: string; action: MuteAction }>();
+  useEffect(() => () => setForm(undefined), [source, issueId]);
   const current = useRef({ source, issueId });
   useEffect(() => {
     current.current = { source, issueId };
   });
   const busy = acting === issueId;
 
-  const onAction = (action: TriageAction) => {
+  const onAction = (action: TriageAction, terms?: MuteTerms) => {
     if (!source || !issue) {
       return;
     }
     const started = { source, issueId };
     const stillHere = () => current.current.source === started.source && current.current.issueId === started.issueId;
     setActing(issueId);
-    setFailure(undefined);
+    setNotice(undefined);
     source
-      .triage(issue.id, action)
-      .then((answer) => {
+      .triage(issue.id, action, terms)
+      .then(({ warning, ...answer }) => {
         if (stillHere()) {
           summary.replace(answer);
           history.reload();
+          if (warning) {
+            setNotice({ ...started, severity: 'warning', message: warning });
+          }
         }
       })
       .catch((error) => {
         if (stillHere()) {
-          setFailure({ issueId, message: messageOf(error, 'The action failed.') });
+          setNotice({ ...started, severity: 'error', message: messageOf(error, 'The action failed.') });
           summary.reload();
           history.reload();
         }
       })
       .finally(() => setActing((id) => (id === started.issueId ? undefined : id)));
   };
+
+  const choose = (action: TriageAction) => {
+    if (!source) {
+      return;
+    }
+    if (action === 'mute-for' || action === 'mute-until') {
+      setForm({ source, issueId, action });
+    } else {
+      onAction(action);
+    }
+  };
+  const openForm = form?.source === source && form?.issueId === issueId ? form : undefined;
+  const shownNotice = notice?.source === source && notice?.issueId === issueId ? notice : undefined;
 
   const actions = [
     <Button key="back" icon="arrow-left" variant="secondary" onClick={() => navigate(listPath(withEvent(search)))}>
@@ -223,9 +247,19 @@ export function IssuePage(): React.JSX.Element {
         <>
           {issue && <IssueSummary issue={issue} timeZone={timeZone} />}
           {issue && source.canTriage() && (
-            <TriageButtons actions={triageActions(issue.status)} busy={busy} size="md" onAction={onAction} />
+            <TriageButtons actions={triageActions(issue.status)} busy={busy} size="md" onAction={choose} />
           )}
-          {failure?.issueId === issueId && <Alert severity="error" title={failure.message} />}
+          {openForm && (
+            <MuteForm
+              action={openForm.action}
+              onDismiss={() => setForm(undefined)}
+              onSubmit={(terms) => {
+                setForm(undefined);
+                onAction(openForm.action, terms);
+              }}
+            />
+          )}
+          {shownNotice && <Alert severity={shownNotice.severity} title={shownNotice.message} />}
           {eventId && (
             <PageSection title="Event" loading="Loading event..." state={eventState}>
               {event.value && issue && !foreignEvent && (

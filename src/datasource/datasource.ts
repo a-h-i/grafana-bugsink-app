@@ -14,6 +14,7 @@ import { lastValueFrom, map, Observable } from 'rxjs';
 import { eventRows } from './eventRows';
 import { issueRows } from './issueRows';
 import { withLinkRanges } from './links';
+import { muteTermsError, SHAPE_MESSAGE } from './muteTerms';
 import {
   BugsinkOptions,
   BugsinkQuery,
@@ -24,8 +25,11 @@ import {
   IssueHistory,
   IssueList,
   IssueTags,
+  MuteAction,
+  MuteTerms,
   Project,
   TriageAction,
+  TriageResult,
 } from './types';
 
 const APP_ID = 'ahmedismail-bugsink-app';
@@ -43,6 +47,19 @@ function issuePath(id: string): string {
     throw new Error(`"${id}" is not an issue id.`);
   }
   return `issues/${id}`;
+}
+
+// muteBody is the request body of a mute action, holding only the validated terms.
+function muteBody(action: MuteAction, terms: MuteTerms | undefined): MuteTerms {
+  if (!terms) {
+    throw new Error(SHAPE_MESSAGE[action]);
+  }
+  const refusal = muteTermsError(action, terms);
+  if (refusal) {
+    throw new Error(refusal);
+  }
+  const { period, periods, threshold } = terms;
+  return action === 'mute-until' ? { period, periods, threshold } : { period, periods };
 }
 
 function failureMessage(error: { message?: string; data?: { message?: string } }, fallback: string): string {
@@ -100,8 +117,10 @@ export class BugsinkDataSource extends DataSourceWithBackend<BugsinkQuery, Bugsi
     return this.getResource(`${issuePath(id)}/history`, undefined, QUIET);
   }
 
-  async triage(id: string, action: TriageAction): Promise<IssueDetail> {
-    return this.postResource(`${issuePath(id)}/${action}`, undefined, {
+  async triage(id: string, action: TriageAction, terms?: MuteTerms): Promise<TriageResult> {
+    const path = `${issuePath(id)}/${action}`;
+    const body = action === 'mute-for' || action === 'mute-until' ? muteBody(action, terms) : undefined;
+    return this.postResource(path, body, {
       ...QUIET,
       headers: { 'X-Bugsink-Triage': '1' },
     });

@@ -85,9 +85,13 @@ issue links open the Bugsink on the host. `Bugsink project-bound` (uid `bugsink-
 `PROJECT_READ` token, which sees only `sample-python`.
 
 `Bugsink triage` (uid `bugsink-triage`) is the same instance with the `GLOBAL_TRIAGE` token and `Triage` switched on, so editors
-and admins get `Resolve`, `Reopen`, `Mute` and `Unmute` on it. Every action runs as the token's Bugsink user. The other
-data sources have triage off. Grafana's anonymous user is an Admin, so anyone who can open this Grafana can triage. A triage
-call needs the header `X-Bugsink-Triage: 1`, which the app sends, so a page on another web site cannot triage through your browser.
+and admins get `Resolve`, `Resolve in latest release`, `Resolve in next release`, `Reopen`, `Mute`, `Mute for a period`,
+`Mute until a threshold` and `Unmute` on it. Every action runs with the token, and Bugsink's history records it without a user.
+Attribution comments are on, so each action also writes a comment in Bugsink naming the Grafana login, or `an anonymous user`
+for the anonymous Admin. The other data sources have triage off. Grafana's anonymous user is an Admin, so anyone who can open
+this Grafana can triage. A triage call needs the header `X-Bugsink-Triage: 1`, which the app sends, so a page on another web
+site cannot triage through your browser. A page that uses DNS rebinding to reach Grafana under its own name can add the header;
+it carries no Grafana session, but on this stack anonymous access is Admin, so such a page can triage.
 
 The end-to-end tests make two local Grafana users through the admin API (`tests/users.setup.ts`): `m7-editor` (role Editor,
 password `m7-editor-e2e`) and `m7-viewer` (role Viewer, password `m7-viewer-e2e`). Both passwords are public development-only

@@ -26,10 +26,11 @@ Create the token in Bugsink. A token has capabilities, and it can be bound to on
    - **API token**: the token you created. Grafana stores it encrypted and does not show it again.
    - **Trace and log links** (optional): the Tempo and Loki data sources and the link settings. See [Trace and log links](#trace-and-log-links).
    - **Triage** (optional, off by default): lets editors and admins resolve, reopen, mute and unmute issues. See [Triage](#triage). If anonymous users have the Editor or Admin role, anyone who can open Grafana can triage.
+   - **Attribution comments** (optional, on by default, under Triage): writes a comment on the issue in Bugsink after each action. See [Attribution comments](#attribution-comments).
    - **Hide stack trace text** (optional, off by default): see below.
 5. Click `Save & test`. A data source provisioned from a file has a `Test` button instead.
 
-The test makes at least one read request per capability and reports the result. With Triage on, it also checks `issues:triage` (see [Triage](#triage)). It stops at the first answer that ends the check: a connection error or timeout, a rejected token, an answer that is not Bugsink's, or an unexpected answer to a capability check.
+The test makes at least one read request per capability and reports the result. With Triage on, it also checks `issues:triage`, and with Attribution comments on, `issues:comment`. Those two checks are writes that Bugsink refuses before it changes anything (see [Triage](#triage)). It stops at the first answer that ends the check: a connection error or timeout, a rejected token, an answer that is not Bugsink's, or an unexpected answer to a capability check. An unexpected answer to the `issues:comment` check fails the test only when Bugsink accepts the check (see [Attribution comments](#attribution-comments)).
 
 For an event whose stack frames are not inside an exception, the plugin shows Bugsink's own stack trace text, which can include local variables. Everyone who can query this data source in Grafana can read it. Switch on `Hide stack trace text` to remove that text: the plugin's backend drops it, so it never reaches the browser. The event then shows the notice `Bugsink's stack trace text is hidden for this data source.`
 
@@ -55,7 +56,7 @@ Click the short id of an issue in the list to open its page. The page has five s
 - **Event**: the content of one event (see [Event](#event)). Needs `events:read`.
 - **Events**: the issue's events with Event ID, Timestamp and Ingested at, in the order Bugsink returns them (newest first), 25 per page. Event ID opens the event in the Event section, and the icon beside it opens the event in Bugsink in a new tab. The event on show is in bold. At most 1000 events are read; when it stops there it shows `Only the newest 1000 events were read.`
 - **Tags**: one row per tag key, with its values and how many events carry each, for example `development (26), staging (3)`. A row shows the 5 values with the most events, then `and <n> more values`. The page reads at most 5000 tag values; when it stops there it shows `Only the first 5000 tag values were read.` Needs `events:read`.
-- **History**: what happened to the issue, newest first: the time, what happened (`First seen`, `Resolved`, `Muted`, `Regressed`, `Unmuted`, `Reopened`, `Resolved in the next release` or `Comment`), who did it when Bugsink knows, and the comment text. At most 5000 entries are read; when it stops there it shows `Only the newest 5000 history entries were read.`
+- **History**: what happened to the issue, newest first: the time, what happened, who did it when Bugsink knows, and the comment text. The entry names the details Bugsink holds, for example `Muted for 2 days, until <time>`, `Muted until 100 or more events in 1 hour`, `Unmuted after 100 or more events in 1 hour`, `Resolved in release <release>` or `Resolved in the next release`. An entry without details shows its kind: `First seen`, `Resolved`, `Muted`, `Regressed`, `Unmuted`, `Reopened` or `Comment`. At most 5000 entries are read; when it stops there it shows `Only the newest 5000 history entries were read.`
 
 With triage on and a role that may triage, the page also shows the actions for the issue's state (see [Triage](#triage)).
 
@@ -100,12 +101,13 @@ An event id that is not valid shows `"<id>" is not an event id.`
 
 ## Triage
 
-Triage lets people resolve, reopen, mute and unmute issues without leaving Grafana. It is off by default.
+Triage lets people resolve, reopen, mute and unmute issues without leaving Grafana. It is off by default. It works on one issue at a time.
 
 ### Switch it on
 
-1. Give the API token the capability `issues:triage`, in addition to the read capabilities.
+1. Give the API token `issues:triage`, and `issues:comment` for attribution comments, in addition to the read capabilities.
 2. In the data source settings, switch on `Triage` and click `Save & test`.
+3. Attribution comments is on by default: after each action the plugin writes a comment in Bugsink with the Grafana login (see [Attribution comments](#attribution-comments)). Switch it off in the settings, or with `attributionComments: false` under `jsonData` in a provisioning file.
 
 The switch is per data source. With it off, nobody sees triage controls, and the data source answers a triage call from an editor or admin with `Triage is switched off for this data source.`
 
@@ -117,29 +119,61 @@ The test with Triage on asks Bugsink whether the token may triage. It calls reso
 
 ### Who may triage
 
-Users whose Grafana org role is Editor or Admin. A Viewer sees no controls, and a direct call is refused with `Only editors and admins can triage issues.`
+Users whose Grafana org role is Editor or Admin. A Viewer sees no controls, and a direct call is refused with `Only editors and admins can triage issues.` Grafana RBAC roles and plugin actions do not apply: a backend plugin on Grafana OSS cannot check them for the caller without the `externalServiceAccounts` and `idForwarded` feature toggles, which are off by default and support one organization only.
 
 An anonymous session and a service account count by their org role.
 
 A triage call must carry the header `X-Bugsink-Triage: 1`. The app sends it; a script that calls the data source's resources must send it too. Without it the call is refused with `Triage calls need the header X-Bugsink-Triage: 1.`
 
-**Warning:** when Grafana allows anonymous access with the role Editor or Admin, everyone who can open Grafana can triage. The required header keeps a page on another web site from triaging through a visitor's browser, because such a page cannot add the header to its request. It does not stop anyone who can open Grafana with the Editor or Admin role, anonymous visitors included.
+**Warning:** when Grafana allows anonymous access with the role Editor or Admin, everyone who can open Grafana can triage. The required header keeps a page on another web site from triaging through a visitor's browser, because such a page cannot add the header to its request. It does not stop anyone who can open Grafana with the Editor or Admin role, anonymous visitors included. A page that uses DNS rebinding to reach Grafana under Grafana's own name can add the header, but its request carries no Grafana session, so it gets only what anonymous access allows.
 
-Every action runs in Bugsink as the user of the API token. Bugsink's history does not name the Grafana user.
+The two mute routes read a request body of at most 1024 bytes and refuse one that holds anything but the expected fields.
+
+Every action runs in Bugsink with the API token, and Bugsink's history records it without a user, so it never names the Grafana user. To name the Grafana user, use [Attribution comments](#attribution-comments).
 
 ### Actions
 
 | State | Issue page | Issue list |
 | :--- | :--- | :--- |
-| Open | Resolve, Mute | Resolve, Mute |
-| Muted | Resolve, Unmute | Resolve |
+| Open | Resolve, Resolve in latest release, Resolve in next release, Mute, Mute for a period, Mute until a threshold | Resolve, Mute |
+| Muted | Resolve, Resolve in latest release, Resolve in next release, Unmute | Resolve |
 | Resolved | Reopen | none |
 
 The list shows the buttons in the Actions column of each row. The issue page shows them under the summary. While an action runs, the buttons of that issue are disabled.
 
-After an action, the list row and the issue page show the state Bugsink returned at once. Another data source that points at the same Bugsink can show the old state for up to 15 seconds (see [Limits](#limits)).
+- **Resolve** resolves the issue now.
+- **Resolve in latest release** resolves it in the latest release Bugsink knows. **Resolve in next release** resolves it in the next release. Bugsink has no release picker in its API, so the plugin has none either.
+- **Mute** mutes the issue without an end.
+- **Mute for a period** asks for a number of periods from 1 to 100 and a period: minutes, hours, days, weeks, months or years. The issue is unmuted when the time has passed.
+- **Mute until a threshold** asks for a number of events from 1 to 1000000, a number of periods from 1 to 100 and a period. The issue is unmuted when it gets that many events within that time.
 
-Triage is available in the app only. Dashboard tables and Explore do not offer it.
+After an action, the list row and the issue page show Bugsink's answer at once and keep it until the next load, which reads Bugsink again. Another data source that points at the same Bugsink can show the old state for up to 15 seconds (see [Limits](#limits)).
+
+Triage is available in the app only. Dashboard tables and Explore do not offer it. Grafana's query caching (Enterprise and Cloud) can serve a dashboard's issue table from Grafana's own cache after an action. The plugin cannot clear that cache.
+
+### Attribution comments
+
+After a successful action, the plugin writes a comment on the issue in Bugsink that names the action and the Grafana login of the person who took it. For example:
+
+- `Muted for 2 days from Grafana by "m7-editor".`
+- `Resolved in the next release from Grafana by "m7-editor".`
+- `Muted until 100 or more events in 1 hour from Grafana by "m7-editor".`
+
+An anonymous session is written as `by an anonymous user.`, without quotes. A service account shows as its login, `sa-...`. Some sign-in methods make the login an email address, and then the comment holds that address. A login longer than 100 characters is cut.
+
+Everyone who can see the issue in Bugsink can read the comment. It holds the Grafana login, not the email address of the user. Bugsink's own history entry for the action names no user.
+
+- **Switch**: `Attribution comments` in the data source settings, under Triage. It has an effect only when Triage is on. It is on by default, and a data source saved before the switch existed keeps it on.
+- **Token**: the API token needs `issues:comment`. Without it, comments fail.
+- **When the comment fails**: the action stands. The app shows a warning with the reason, on the list and on the issue page.
+- **Health check**: with Triage and Attribution comments on, the test message ends with one of these lines:
+  - `Actions are attributed by a comment.`
+  - `It lacks issues:comment, so actions are not attributed.` The check stays green.
+  - `Bugsink answered HTTP <n> to a check for issues:comment, so actions may not be attributed.` The check stays green.
+
+  If Bugsink accepts the check, the test fails with `Bugsink answered HTTP <n> to a check for issues:comment.`
+
+  The check sends an empty comment for an issue id that cannot exist, which changes nothing.
 
 ## Querying issues
 

@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/a-h-i/grafana-bugsink-app/pkg/bugsink"
@@ -18,8 +19,11 @@ type fakeProber struct {
 	issueErr    error
 	eventsErr   error
 	triageErr   error
+	commentErr  error
+	commentCode int
 	ran         []string
 	triaged     []string
+	commented   []string
 }
 
 func (f *fakeProber) ListProjects(context.Context) ([]bugsink.Project, error) {
@@ -37,10 +41,16 @@ func (f *fakeProber) ListEventsWithoutIssue(context.Context) error {
 	return f.eventsErr
 }
 
-func (f *fakeProber) Triage(_ context.Context, id string, action bugsink.TriageAction) (bugsink.Issue, error) {
+func (f *fakeProber) Triage(_ context.Context, id string, action bugsink.TriageAction, _ bugsink.MuteTerms) (bugsink.Issue, error) {
 	f.ran = append(f.ran, "triage")
 	f.triaged = append(f.triaged, id+" "+string(action))
 	return bugsink.Issue{}, f.triageErr
+}
+
+func (f *fakeProber) AddComment(_ context.Context, issueID, text string) (int, error) {
+	f.ran = append(f.ran, "comment")
+	f.commented = append(f.commented, fmt.Sprintf("%s %q", issueID, text))
+	return f.commentCode, f.commentErr
 }
 
 func apiErr(status int, c bugsink.Capability) error {
@@ -120,7 +130,7 @@ func TestCheckHealthMessages(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), defaultHealthTimeout)
 			defer cancel()
-			res := checkHealth(ctx, testURL, defaultHealthTimeout, tt.f, false)
+			res := checkHealth(ctx, testURL, defaultHealthTimeout, tt.f, false, false)
 			if res.Status != tt.status || res.Message != tt.message {
 				t.Fatalf("got %v %q\nwant %v %q", res.Status, res.Message, tt.status, tt.message)
 			}
@@ -137,7 +147,7 @@ func TestCheckHealthTriageOffNeverTriages(t *testing.T) {
 		{projects: named("a"), issueErr: apiErr(404, ""), eventsErr: apiErr(403, bugsink.EventsRead)},
 		{projectsErr: apiErr(401, "")},
 	} {
-		checkHealth(context.Background(), testURL, defaultHealthTimeout, f, false)
+		checkHealth(context.Background(), testURL, defaultHealthTimeout, f, false, true)
 		if len(f.triaged) != 0 {
 			t.Fatalf("Triage called with %v while triage is off", f.triaged)
 		}
@@ -175,7 +185,7 @@ func TestCheckHealthTriage(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), defaultHealthTimeout)
 			defer cancel()
-			res := checkHealth(ctx, testURL, defaultHealthTimeout, tt.f, true)
+			res := checkHealth(ctx, testURL, defaultHealthTimeout, tt.f, true, false)
 			if res.Status != tt.status || res.Message != tt.message {
 				t.Fatalf("got %v %q\nwant %v %q", res.Status, res.Message, tt.status, tt.message)
 			}
@@ -184,6 +194,80 @@ func TestCheckHealthTriage(t *testing.T) {
 			}
 			if len(tt.f.triaged) > 1 {
 				t.Fatalf("Triage called %d times", len(tt.f.triaged))
+			}
+		})
+	}
+}
+
+func TestCheckHealthCommentProbeNeedsBothSwitches(t *testing.T) {
+	for _, sw := range []struct{ triage, attribution bool }{{false, false}, {false, true}, {true, false}} {
+		f := &fakeProber{projects: named("a"), issueErr: apiErr(404, ""), eventsErr: apiErr(400, ""), triageErr: apiErr(404, ""), commentErr: apiErr(400, "")}
+		res := checkHealth(context.Background(), testURL, defaultHealthTimeout, f, sw.triage, sw.attribution)
+		if len(f.commented) != 0 {
+			t.Fatalf("triage %v attribution %v: AddComment called with %v", sw.triage, sw.attribution, f.commented)
+		}
+		if res.Status != backend.HealthStatusOk || strings.Contains(res.Message, "attributed") {
+			t.Fatalf("triage %v attribution %v: got %v %q", sw.triage, sw.attribution, res.Status, res.Message)
+		}
+	}
+}
+
+func TestCheckHealthComment(t *testing.T) {
+	has404, has400 := apiErr(404, ""), apiErr(400, "")
+	canTriage := "Connected to Bugsink. Projects visible to this token: a. The token can triage issues."
+	mayNot := func(status int) string {
+		return fmt.Sprintf("%s Bugsink answered HTTP %d to a check for issues:comment, so actions may not be attributed.", canTriage, status)
+	}
+	probed := []string{absentIssueID + ` ""`}
+	tests := []struct {
+		name        string
+		triageErr   error
+		commentErr  error
+		commentCode int
+		status      backend.HealthStatus
+		message     string
+		commented   []string
+	}{
+		{"token can comment", has404, has400, 0,
+			backend.HealthStatusOk, canTriage + " Actions are attributed by a comment.", probed},
+		{"token lacks issues:comment", has404, apiErr(403, bugsink.IssuesComment), 0,
+			backend.HealthStatusOk, canTriage + " It lacks issues:comment, so actions are not attributed.", probed},
+		{"token lacks issues:triage and issues:comment", apiErr(403, bugsink.IssuesTriage), apiErr(403, bugsink.IssuesComment), 0,
+			backend.HealthStatusError, "The API token lacks: issues:triage.", probed},
+		{"token lacks issues:triage, can comment", apiErr(403, bugsink.IssuesTriage), has400, 0,
+			backend.HealthStatusError, "The API token lacks: issues:triage.", probed},
+		{"200 accepted the probe", has404, nil, 200,
+			backend.HealthStatusError, "Bugsink answered HTTP 200 to a check for issues:comment.", probed},
+		{"201 accepted the probe", has404, nil, 201,
+			backend.HealthStatusError, "Bugsink answered HTTP 201 to a check for issues:comment.", probed},
+		{"404 cannot tell", has404, has404, 0, backend.HealthStatusOk, mayNot(404), probed},
+		{"405 cannot tell", has404, apiErr(405, ""), 0, backend.HealthStatusOk, mayNot(405), probed},
+		{"500 cannot tell", has404, apiErr(500, ""), 0, backend.HealthStatusOk, mayNot(500), probed},
+		{"403 without a capability cannot tell", has404, apiErr(403, ""), 0, backend.HealthStatusOk, mayNot(403), probed},
+		{"403 naming another capability cannot tell", has404, apiErr(403, bugsink.IssuesTriage), 0, backend.HealthStatusOk, mayNot(403), probed},
+		{"401 on the comment probe", has404, apiErr(401, ""), 0,
+			backend.HealthStatusError, "Bugsink rejected the API token. Check that it was copied in full and has not been deleted.", probed},
+		{"unreachable on the comment probe", has404, fmt.Errorf("Post %q: %w", "http://x/", errors.New("connection reset by peer")), 0,
+			backend.HealthStatusError, "Cannot reach Bugsink at http://bugsink.example:8000/: connection reset by peer.", probed},
+		{"timeout on the comment probe", has404, fmt.Errorf("Post %q: %w", "http://x/", context.DeadlineExceeded), 0,
+			backend.HealthStatusError, "Bugsink at http://bugsink.example:8000/ did not answer within 10 seconds.", probed},
+		{"triage probe fails first", apiErr(500, ""), has400, 0,
+			backend.HealthStatusError, "Bugsink answered HTTP 500 to a check for issues:triage.", []string{}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(context.Background(), defaultHealthTimeout)
+			defer cancel()
+			f := &fakeProber{projects: named("a"), issueErr: has404, eventsErr: has400, triageErr: tt.triageErr, commentErr: tt.commentErr, commentCode: tt.commentCode}
+			res := checkHealth(ctx, testURL, defaultHealthTimeout, f, true, true)
+			if res.Status != tt.status || res.Message != tt.message {
+				t.Fatalf("got %v %q\nwant %v %q", res.Status, res.Message, tt.status, tt.message)
+			}
+			if fmt.Sprint(f.commented) != fmt.Sprint(tt.commented) {
+				t.Fatalf("commented = %v, want %v", f.commented, tt.commented)
+			}
+			if len(f.commented) > 0 && fmt.Sprint(f.ran) != "[projects issue events triage comment]" {
+				t.Fatalf("probes run = %v, want the comment probe after the triage probe", f.ran)
 			}
 		})
 	}

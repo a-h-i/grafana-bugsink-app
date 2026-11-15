@@ -278,8 +278,54 @@ describe('ConfigEditor', () => {
       const privacy = screen.getByRole('heading', { level: 3, name: 'Privacy' });
       const follows = (a: Node, b: Node) => (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
       expect(follows(triage, screen.getByLabelText('Triage'))).toBe(true);
-      expect(follows(screen.getByLabelText('Triage'), privacy)).toBe(true);
+      expect(follows(screen.getByLabelText('Triage'), screen.getByLabelText('Attribution comments'))).toBe(true);
+      expect(follows(screen.getByLabelText('Attribution comments'), privacy)).toBe(true);
       expect(follows(privacy, screen.getByLabelText('Hide stack trace text'))).toBe(true);
+    });
+  });
+
+  describe('attribution comments', () => {
+    it('renders on when the key is absent and explains itself', () => {
+      renderEditor();
+
+      const toggle = screen.getByLabelText('Attribution comments');
+      expect(toggle).toHaveAttribute('id', 'bugsink-attribution');
+      expect(toggle).toBeChecked();
+      expect(
+        screen.getByText(
+          'After each action, add a comment to the issue in Bugsink naming the Grafana login and the action. Everyone who can see the issue in Bugsink can read it. The API token needs issues:comment.'
+        )
+      ).toBeInTheDocument();
+    });
+
+    it('renders on when stored null, as the backend reads it', () => {
+      renderEditor({ jsonData: { attributionComments: null as unknown as boolean } });
+
+      expect(screen.getByLabelText('Attribution comments')).toBeChecked();
+    });
+
+    it('renders off when stored false', () => {
+      renderEditor({ jsonData: { attributionComments: false } });
+
+      expect(screen.getByLabelText('Attribution comments')).not.toBeChecked();
+    });
+
+    it('switching it off stores false and keeps the other options, switching it on stores true', () => {
+      const onOptionsChange = renderEditor({ jsonData: { browserUrl: 'x', triageEnabled: true } });
+
+      fireEvent.click(screen.getByLabelText('Attribution comments'));
+      expect(lastCall(onOptionsChange).jsonData).toEqual({
+        browserUrl: 'x',
+        triageEnabled: true,
+        attributionComments: false,
+      });
+
+      fireEvent.click(screen.getByLabelText('Attribution comments'));
+      expect(lastCall(onOptionsChange).jsonData).toEqual({
+        browserUrl: 'x',
+        triageEnabled: true,
+        attributionComments: true,
+      });
     });
   });
 });

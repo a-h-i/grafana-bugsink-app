@@ -458,7 +458,53 @@ describe('IssuesPage', () => {
       expect(statusOf('SAMPLE-PYTHON-3')).toBe('Muted');
     });
 
-    it('drops a failure that arrives after the list has changed', async () => {
+    it('drops an answer that arrives after the list has changed', async () => {
+      let answer: (value: unknown) => void = () => {};
+      mockSources.bugsink.triage.mockReturnValue(new Promise((resolve) => (answer = resolve)));
+      renderPage('?ds=bugsink');
+      await screen.findByText('SAMPLE-PYTHON-2');
+      await screen.findByRole('combobox', { name: 'State' });
+      fireEvent.click(screen.getByRole('button', { name: 'Resolve SAMPLE-PYTHON-2' }));
+      let land: (value: unknown) => void = () => {};
+      mockSources.bugsink.listIssues.mockReturnValueOnce(new Promise((resolve) => (land = resolve)));
+
+      await pick('State', 'Muted');
+      await waitFor(() => expect(lastQuery('bugsink')[0].state).toBe('muted'));
+      await act(async () => answer({ id: 'u1', status: 'resolved' }));
+
+      expect(statusOf('SAMPLE-PYTHON-2')).toBe('Open');
+      await act(async () => land({ rows: [row('u1', 'SAMPLE-PYTHON-2')] }));
+      expect(statusOf('SAMPLE-PYTHON-2')).toBe('Open');
+      expect(screen.getByRole('button', { name: 'Resolve SAMPLE-PYTHON-2' })).toBeEnabled();
+    });
+
+    it('actions wait for the reload', async () => {
+      renderPage('?ds=bugsink');
+      await screen.findByText('SAMPLE-PYTHON-2');
+      let land: (value: unknown) => void = () => {};
+      mockSources.bugsink.listIssues.mockReturnValueOnce(new Promise((resolve) => (land = resolve)));
+
+      fireEvent.click(screen.getByTestId('data-testid RefreshPicker run button'));
+
+      expect(screen.getByRole('button', { name: 'Resolve SAMPLE-PYTHON-2' })).toBeDisabled();
+      await act(async () => land({ rows: [row('u1', 'SAMPLE-PYTHON-2')] }));
+      expect(screen.getByRole('button', { name: 'Resolve SAMPLE-PYTHON-2' })).toBeEnabled();
+    });
+
+    it('actions come back when the reload fails', async () => {
+      renderPage('?ds=bugsink');
+      await screen.findByText('SAMPLE-PYTHON-2');
+      mockSources.bugsink.listIssues.mockRejectedValueOnce(new Error('Bugsink is down.'));
+
+      fireEvent.click(screen.getByTestId('data-testid RefreshPicker run button'));
+
+      expect(await screen.findByText('Bugsink is down.')).toBeInTheDocument();
+      fireEvent.click(screen.getByTestId('data-testid RefreshPicker run button'));
+
+      expect(await screen.findByRole('button', { name: 'Resolve SAMPLE-PYTHON-2' })).toBeEnabled();
+    });
+
+    it('a failure after a new search is shown', async () => {
       let fail: (reason: unknown) => void = () => {};
       mockSources.bugsink.triage.mockReturnValue(new Promise((_, reject) => (fail = reject)));
       renderPage('?ds=bugsink');
@@ -468,15 +514,67 @@ describe('IssuesPage', () => {
 
       await pick('State', 'Muted');
       await waitFor(() => expect(lastQuery('bugsink')[0].state).toBe('muted'));
+      await screen.findByText('SAMPLE-PYTHON-2');
       const loads = mockSources.bugsink.listIssues.mock.calls.length;
       await act(async () => fail(new Error('Bugsink refused the request: Issue is already resolved.')));
 
-      expect(screen.queryByText(/Issue is already resolved/)).not.toBeInTheDocument();
+      expect(
+        screen.getByText('SAMPLE-PYTHON-2: Bugsink refused the request: Issue is already resolved.')
+      ).toBeInTheDocument();
       expect(mockSources.bugsink.listIssues).toHaveBeenCalledTimes(loads);
-      expect(screen.getByRole('button', { name: 'Resolve SAMPLE-PYTHON-2' })).toBeEnabled();
+      expect(statusOf('SAMPLE-PYTHON-2')).toBe('Open');
     });
 
-    it('drops an answer that arrives after the list has changed', async () => {
+    it('the failure clears on the next action', async () => {
+      mockSources.bugsink.triage.mockRejectedValueOnce(new Error('Issue is already resolved.'));
+      renderPage('?ds=bugsink');
+      await screen.findByText('SAMPLE-PYTHON-2');
+      await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Resolve SAMPLE-PYTHON-2' })));
+      await screen.findByText('SAMPLE-PYTHON-2: Issue is already resolved.');
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Mute SAMPLE-PYTHON-2' })).toBeEnabled());
+      mockSources.bugsink.triage.mockReturnValue(new Promise(() => {}));
+
+      fireEvent.click(screen.getByRole('button', { name: 'Mute SAMPLE-PYTHON-2' }));
+
+      expect(screen.queryByText(/Issue is already resolved/)).not.toBeInTheDocument();
+    });
+
+    it('the failure clears on the next load', async () => {
+      mockSources.bugsink.triage.mockRejectedValueOnce(new Error('Issue is already resolved.'));
+      renderPage('?ds=bugsink');
+      await screen.findByText('SAMPLE-PYTHON-2');
+      await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Resolve SAMPLE-PYTHON-2' })));
+      await screen.findByText('SAMPLE-PYTHON-2: Issue is already resolved.');
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Mute SAMPLE-PYTHON-2' })).toBeEnabled());
+      let land: (value: unknown) => void = () => {};
+      mockSources.bugsink.listIssues.mockReturnValueOnce(new Promise((resolve) => (land = resolve)));
+
+      fireEvent.click(screen.getByTestId('data-testid RefreshPicker run button'));
+      await act(async () => land({ rows: [row('u1', 'SAMPLE-PYTHON-2')] }));
+
+      expect(screen.queryByText(/Issue is already resolved/)).not.toBeInTheDocument();
+    });
+
+    it('a warning shows with the short id', async () => {
+      mockSources.bugsink.triage.mockResolvedValue({
+        id: 'u1',
+        status: 'resolved',
+        warning: 'The comment could not be added.',
+      });
+      renderPage('?ds=bugsink');
+      await screen.findByText('SAMPLE-PYTHON-2');
+      const loads = mockSources.bugsink.listIssues.mock.calls.length;
+
+      await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Resolve SAMPLE-PYTHON-2' })));
+
+      expect(await screen.findByTestId('data-testid Alert warning')).toHaveTextContent(
+        'SAMPLE-PYTHON-2: The comment could not be added.'
+      );
+      expect(statusOf('SAMPLE-PYTHON-2')).toBe('Resolved');
+      expect(mockSources.bugsink.listIssues).toHaveBeenCalledTimes(loads);
+    });
+
+    it('a warning after a new search is shown', async () => {
       let answer: (value: unknown) => void = () => {};
       mockSources.bugsink.triage.mockReturnValue(new Promise((resolve) => (answer = resolve)));
       renderPage('?ds=bugsink');
@@ -486,10 +584,71 @@ describe('IssuesPage', () => {
 
       await pick('State', 'Muted');
       await waitFor(() => expect(lastQuery('bugsink')[0].state).toBe('muted'));
-      await act(async () => answer({ id: 'u1', status: 'resolved' }));
+      await screen.findByText('SAMPLE-PYTHON-2');
+      const loads = mockSources.bugsink.listIssues.mock.calls.length;
+      await act(async () => answer({ id: 'u1', status: 'resolved', warning: 'W' }));
 
+      expect(screen.getByTestId('data-testid Alert warning')).toHaveTextContent('SAMPLE-PYTHON-2: W');
+      expect(mockSources.bugsink.listIssues).toHaveBeenCalledTimes(loads);
       expect(statusOf('SAMPLE-PYTHON-2')).toBe('Open');
-      expect(screen.getByRole('button', { name: 'Resolve SAMPLE-PYTHON-2' })).toBeEnabled();
+    });
+
+    it('a warning does not come back when its search comes back', async () => {
+      mockSources.bugsink.triage.mockResolvedValue({ id: 'u1', status: 'resolved', warning: 'W' });
+      renderPage('?ds=bugsink');
+      await screen.findByText('SAMPLE-PYTHON-2');
+      await screen.findByRole('combobox', { name: 'State' });
+      await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Resolve SAMPLE-PYTHON-2' })));
+      expect(await screen.findByText('SAMPLE-PYTHON-2: W')).toBeInTheDocument();
+
+      await pick('State', 'Muted');
+      await waitFor(() => expect(lastQuery('bugsink')[0].state).toBe('muted'));
+      await screen.findByText('SAMPLE-PYTHON-2');
+      await pick('State', 'Unresolved');
+      await waitFor(() => expect(lastQuery('bugsink')[0].state).toBe('unresolved'));
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Resolve SAMPLE-PYTHON-2' })).toBeEnabled());
+
+      expect(screen.queryByText('SAMPLE-PYTHON-2: W')).not.toBeInTheDocument();
+    });
+
+    it('a warning does not come back when its search comes back before the other search loads', async () => {
+      mockSources.bugsink.triage.mockResolvedValue({ id: 'u1', status: 'resolved', warning: 'W' });
+      renderPage('?ds=bugsink');
+      await screen.findByText('SAMPLE-PYTHON-2');
+      await screen.findByRole('combobox', { name: 'State' });
+      await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Resolve SAMPLE-PYTHON-2' })));
+      expect(await screen.findByText('SAMPLE-PYTHON-2: W')).toBeInTheDocument();
+      mockSources.bugsink.listIssues.mockReturnValueOnce(new Promise(() => {}));
+
+      await pick('State', 'Muted');
+      await waitFor(() => expect(lastQuery('bugsink')[0].state).toBe('muted'));
+      await pick('State', 'Unresolved');
+      await waitFor(() => expect(lastQuery('bugsink')[0].state).toBe('unresolved'));
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Resolve SAMPLE-PYTHON-2' })).toBeEnabled());
+
+      expect(screen.queryByText('SAMPLE-PYTHON-2: W')).not.toBeInTheDocument();
+    });
+
+    it('two failures at once load the list again once and show the last', async () => {
+      mockSources.bugsink.listIssues.mockResolvedValue({
+        rows: [row('u1', 'SAMPLE-PYTHON-2'), row('u2', 'SAMPLE-PYTHON-3')],
+      });
+      const fails: Record<string, (reason: unknown) => void> = {};
+      mockSources.bugsink.triage.mockImplementation((id: string) => new Promise((_, reject) => (fails[id] = reject)));
+      renderPage('?ds=bugsink');
+      await screen.findByText('SAMPLE-PYTHON-3');
+      const loads = mockSources.bugsink.listIssues.mock.calls.length;
+      fireEvent.click(screen.getByRole('button', { name: 'Resolve SAMPLE-PYTHON-2' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Mute SAMPLE-PYTHON-3' }));
+
+      await act(async () => {
+        fails.u1(new Error('first'));
+        fails.u2(new Error('second'));
+      });
+
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Resolve SAMPLE-PYTHON-2' })).toBeEnabled());
+      expect(mockSources.bugsink.listIssues).toHaveBeenCalledTimes(loads + 1);
+      expect(screen.getByText('SAMPLE-PYTHON-3: second')).toBeInTheDocument();
     });
   });
 });

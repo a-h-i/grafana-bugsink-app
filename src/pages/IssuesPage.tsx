@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { TimeRange, toURLRange } from '@grafana/data';
 import { config, PluginPage } from '@grafana/runtime';
 import { Alert, Combobox, Field, LoadingBar, LoadingPlaceholder, RefreshPicker, TimeRangePicker } from '@grafana/ui';
@@ -16,7 +16,7 @@ import { shiftTimeRange, toTimeRange, zoomOutTimeRange } from './issues/timeRang
 
 type Outcome = { source: BugsinkDataSource; key: string } & ({ list: IssueList } | { error: string });
 type Statuses = { outcome: Outcome; byId: Record<string, IssueRow['status']> };
-type Failure = { key: string; message: string };
+type Message = { key: string; severity: 'error' | 'warning'; message: string };
 type Scope = { active: boolean };
 
 const keyOf = (canonical: string, refresh: number) => `${canonical}#${refresh}`;
@@ -37,12 +37,17 @@ export function IssuesPage(): React.JSX.Element {
   const [outcome, setOutcome] = useState<Outcome>();
   const [statuses, setStatuses] = useState<Statuses>();
   const [busyIds, setBusyIds] = useState<ReadonlySet<string>>(new Set());
-  const [failure, setFailure] = useState<Failure>();
+  const [triageMessage, setTriageMessage] = useState<Message>();
   const scopeRef = useRef<Scope>({ active: false });
+  const keyRef = useRef('');
 
   const canonical = writeListState(state).toString();
   const key = keyOf(canonical, refresh);
   const wanted = listSearch(state, location.search);
+
+  useLayoutEffect(() => {
+    keyRef.current = key;
+  }, [key]);
 
   useEffect(() => {
     if (uid && wanted !== location.search) {
@@ -69,6 +74,7 @@ export function IssuesPage(): React.JSX.Element {
       .then((result) => scope.active && setOutcome(result));
     return () => {
       scope.active = false;
+      setTriageMessage((m) => (m?.key === requestKey ? undefined : m));
     };
   }, [source, canonical, refresh]);
 
@@ -99,7 +105,7 @@ export function IssuesPage(): React.JSX.Element {
       return;
     }
     const scope = scopeRef.current;
-    setFailure(undefined);
+    setTriageMessage(undefined);
     setBusyIds((prev) => new Set(prev).add(row.id));
     source
       .triage(row.id, action)
@@ -111,14 +117,23 @@ export function IssuesPage(): React.JSX.Element {
               byId: { ...(prev?.outcome === current ? prev.byId : {}), [row.id]: issue.status },
             }));
           }
+          if (issue.warning) {
+            setTriageMessage({
+              key: keyRef.current,
+              severity: 'warning',
+              message: `${row.friendlyId}: ${issue.warning}`,
+            });
+          }
         },
         (error) => {
+          const message = `${row.friendlyId}: ${error?.message || 'The action failed.'}`;
           if (scope.active) {
-            setFailure({
-              key: keyOf(canonical, refresh + 1),
-              message: `${row.friendlyId}: ${error?.message || 'The action failed.'}`,
-            });
+            scope.active = false;
+            keyRef.current = keyOf(canonical, refresh + 1);
+            setTriageMessage({ key: keyRef.current, severity: 'error', message });
             setRefresh((count) => count + 1);
+          } else {
+            setTriageMessage({ key: keyRef.current, severity: 'error', message });
           }
         }
       )
@@ -172,7 +187,7 @@ export function IssuesPage(): React.JSX.Element {
         <IssuesQueryEditor datasource={source} query={state.query} onChange={onQueryChange} onRunQuery={() => {}} />
       )}
       {current && current.key !== key && <LoadingBar width={600} />}
-      {failure?.key === key && <Alert severity="error" title={failure.message} />}
+      {triageMessage?.key === key && <Alert severity={triageMessage.severity} title={triageMessage.message} />}
       {current && 'error' in current && <Alert severity="error" title={current.error} />}
       {current && 'list' in current && current.list.notice && <Alert severity="warning" title={current.list.notice} />}
       {current && 'list' in current && (
@@ -180,7 +195,7 @@ export function IssuesPage(): React.JSX.Element {
           rows={rows}
           timeZone={timeZone}
           issueHref={(row) => issuePath(row.id, location.search)}
-          triage={source?.canTriage() ? { busyIds, onAction } : undefined}
+          triage={source?.canTriage() ? { busyIds, disabled: current.key !== key, onAction } : undefined}
         />
       )}
       {!unknown && !failed && !current && <LoadingPlaceholder text="Loading issues..." />}
