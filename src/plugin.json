@@ -13,7 +13,11 @@
       "small": "img/logo.svg",
       "large": "img/logo.svg"
     },
-    "screenshots": [],
+    "screenshots": [
+      { "name": "Issue list", "path": "img/screenshots/issue-list.png" },
+      { "name": "Issue page with triage actions", "path": "img/screenshots/issue-detail.png" },
+      { "name": "Event detail", "path": "img/screenshots/event-detail.png" }
+    ],
     "version": "%VERSION%",
     "updated": "%TODAY%"
   },

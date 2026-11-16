@@ -50,7 +50,7 @@ var (
 const (
 	msgEnterURL         = "Enter the Bugsink URL."
 	msgBugsinkURLScheme = "The Bugsink URL must start with http:// or https://."
-	msgEnterToken       = "Enter an API token."
+	msgAuthMissing      = "Enter an API token."
 	msgSettingsInvalid  = "The data source settings are invalid."
 	msgBrowserURLScheme = "The browser URL must start with http:// or https://."
 )
@@ -97,7 +97,7 @@ func (d *Datasource) configure(ctx context.Context, s backend.DataSourceInstance
 	case errors.Is(err, bugsink.ErrInvalidURL):
 		return msgBugsinkURLScheme
 	case errors.Is(err, bugsink.ErrNoToken):
-		return msgEnterToken
+		return msgAuthMissing
 	case err != nil:
 		return msgSettingsInvalid
 	}

@@ -191,10 +191,10 @@ func tokenOf(req *http.Request) string {
 }
 
 // queryHidingDoer replaces the URL in a request's url.Error by the request's scheme, host and path, made forwardable.
-type queryHidingDoer struct{ client *http.Client }
+type queryHidingDoer struct{ next gen.HttpRequestDoer }
 
 func (d queryHidingDoer) Do(req *http.Request) (*http.Response, error) {
-	resp, err := d.client.Do(req)
+	resp, err := d.next.Do(req)
 	var urlErr *url.Error
 	if errors.As(err, &urlErr) {
 		return resp, &url.Error{Op: urlErr.Op, URL: forwardableURL(req.URL, tokenOf(req)), Err: urlErr.Err}

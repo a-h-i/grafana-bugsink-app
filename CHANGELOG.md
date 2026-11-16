@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.1
+
+- Screenshots for the plugin catalog.
+- Two findings of the gosec scanner are marked as reviewed; no behaviour changes.
+
 ## 0.1.0
 
 - Bugsink data source: connect to a Bugsink instance and verify the URL, the API token and its read capabilities.
