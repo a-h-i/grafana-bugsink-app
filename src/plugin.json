@@ -4,8 +4,8 @@
   "name": "Bugsink",
   "id": "ahmedismail-bugsink-app",
   "info": {
-    "keywords": ["app"],
-    "description": "",
+    "keywords": ["bugsink", "sentry", "errors", "error tracking"],
+    "description": "Browse and triage Bugsink issues in Grafana, with links from an error event to its trace and logs",
     "author": {
       "name": "Ahmed Ismail"
     },
@@ -27,7 +27,8 @@
     },
     {
       "type": "datasource",
-      "name": "Bugsink"
+      "name": "Bugsink",
+      "path": "datasource/plugin.json"
     }
   ],
   "dependencies": {

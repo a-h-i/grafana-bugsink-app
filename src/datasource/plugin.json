@@ -9,7 +9,7 @@
   "alerting": true,
   "info": {
     "keywords": ["datasource"],
-    "description": "",
+    "description": "Bugsink issues, events and counts for dashboards, Explore and alert rules",
     "author": {
       "name": "Ahmed Ismail"
     },
