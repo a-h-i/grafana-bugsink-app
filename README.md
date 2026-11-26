@@ -16,6 +16,10 @@ Version 0.1.1 is released on [GitHub Releases](https://github.com/a-h-i/grafana-
 - **Triage**, off by default per data source: resolve, reopen, mute and unmute, resolve in a release, mute for a period or until a volume threshold, with an attribution comment in Bugsink naming the Grafana user.
 - **Alerting**: Grafana alert rules on issue and event counts.
 
+![Issue list with filters and a 24-hour event chart per issue](src/img/screenshots/issue-list.png)
+
+![Issue page with triage actions and the event detail](src/img/screenshots/issue-detail.png)
+
 The user guide, with setup, the token capabilities and every setting, is [`src/README.md`](src/README.md).
 
 ## Install
