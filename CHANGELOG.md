@@ -3,7 +3,7 @@
 ## 0.1.1
 
 - Screenshots for the plugin catalog.
-- Two findings of the gosec scanner are marked as reviewed; no behaviour changes.
+- Two findings of the gosec scanner are resolved in code; no behaviour changes.
 
 ## 0.1.0
 
