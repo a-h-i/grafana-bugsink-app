@@ -18,7 +18,7 @@ Version 0.1.1 is released on [GitHub Releases](https://github.com/a-h-i/grafana-
 
 ![Issue list with filters and a 24-hour event chart per issue](src/img/screenshots/issue-list.png)
 
-![Issue page with triage actions and the event detail](src/img/screenshots/issue-detail.png)
+![Issue page with triage actions and the event's trace and log links](src/img/screenshots/issue-detail.png)
 
 The user guide, with setup, the token capabilities and every setting, is [`src/README.md`](src/README.md).
 
